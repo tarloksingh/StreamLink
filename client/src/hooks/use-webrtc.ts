@@ -27,6 +27,7 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
   const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor">("excellent");
   const [callDuration, setCallDuration] = useState(0);
   const [currentFacingMode, setCurrentFacingMode] = useState<"user" | "environment">("environment");
+  const [hasExistingParticipants, setHasExistingParticipants] = useState(false);
 
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<WebSocket | null>(null);

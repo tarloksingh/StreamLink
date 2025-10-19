@@ -16,6 +16,7 @@ export default function VideoCall() {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Check if this is a viewer joining an existing call
+  // For now, assume first person is broadcaster, others are viewers
   const [isViewer, setIsViewer] = useState(false);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
@@ -41,13 +42,13 @@ export default function VideoCall() {
 
   // Detect if this is a viewer joining an existing call
   useEffect(() => {
-    // If there's already a remote stream when we connect, we're a viewer
-    if (remoteStream && !localStream) {
+    // If there's a remote stream, we're a viewer
+    if (remoteStream) {
       setIsViewer(true);
-      console.log('User is a viewer - joining existing call');
-    } else if (localStream && !remoteStream) {
+      console.log('User is a viewer - watching remote stream');
+    } else if (localStream) {
       setIsViewer(false);
-      console.log('User is the broadcaster - created new call');
+      console.log('User is the broadcaster - showing local stream');
     }
   }, [localStream, remoteStream]);
 
