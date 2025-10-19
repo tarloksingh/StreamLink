@@ -36,33 +36,54 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
   // Initialize local media stream with rear camera preference
   const initializeMedia = useCallback(async (facingMode: "user" | "environment" = "environment") => {
     try {
+      // Safari-compatible constraints - more permissive for better compatibility
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
+          width: { min: 320, ideal: 1280, max: 1920 },
+          height: { min: 240, ideal: 720, max: 1080 },
+          frameRate: { min: 15, ideal: 30, max: 60 },
         },
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 48000, // Consistent sample rate for better echo cancellation
+          sampleRate: { ideal: 48000 },
         },
       };
 
+      console.log("Requesting getUserMedia with constraints:", constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("getUserMedia successful, stream:", stream);
       setLocalStream(stream);
       localStreamRef.current = stream;
       setCurrentFacingMode(facingMode);
       return stream;
     } catch (error) {
       console.error("Error accessing media devices:", error);
-      // Fallback to user-facing camera if environment fails
-      if (facingMode === "environment") {
-        return initializeMedia("user");
+      
+      // More aggressive fallback for Safari
+      try {
+        // Try with minimal constraints first
+        const minimalConstraints: MediaStreamConstraints = {
+          video: { facingMode: { ideal: facingMode } },
+          audio: true,
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(minimalConstraints);
+        setLocalStream(stream);
+        localStreamRef.current = stream;
+        setCurrentFacingMode(facingMode);
+        return stream;
+      } catch (minimalError) {
+        console.error("Minimal constraints also failed:", minimalError);
+        
+        // Final fallback to user-facing camera if environment fails
+        if (facingMode === "environment") {
+          return initializeMedia("user");
+        }
+        throw minimalError;
       }
-      throw error;
     }
   }, []);
 
@@ -86,26 +107,31 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
 
       // Set codec preferences for H.265 if available (Safari)
       if (track.kind === 'video') {
-        const capabilities = RTCRtpSender.getCapabilities('video');
-        if (capabilities) {
-          const codecs = capabilities.codecs;
-          
-          // Prefer H.265 (HEVC) if available, then H.264
-          const preferredCodecs = [
-            ...codecs.filter(c => c.mimeType.toLowerCase().includes('h265') || c.mimeType.toLowerCase().includes('hevc')),
-            ...codecs.filter(c => c.mimeType.toLowerCase().includes('h264') || c.mimeType.toLowerCase().includes('avc')),
-            ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp9')),
-            ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp8')),
-          ];
+        // Check if setCodecPreferences is supported (not available in all Safari versions)
+        if (typeof transceiver.setCodecPreferences === 'function') {
+          try {
+            const capabilities = RTCRtpSender.getCapabilities('video');
+            if (capabilities) {
+              const codecs = capabilities.codecs;
+              
+              // Prefer H.265 (HEVC) if available, then H.264
+              const preferredCodecs = [
+                ...codecs.filter(c => c.mimeType.toLowerCase().includes('h265') || c.mimeType.toLowerCase().includes('hevc')),
+                ...codecs.filter(c => c.mimeType.toLowerCase().includes('h264') || c.mimeType.toLowerCase().includes('avc')),
+                ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp9')),
+                ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp8')),
+              ];
 
-          if (preferredCodecs.length > 0) {
-            try {
-              transceiver.setCodecPreferences(preferredCodecs);
-              console.log('Video codec preferences set:', preferredCodecs.map(c => c.mimeType));
-            } catch (e) {
-              console.log('Could not set codec preferences:', e);
+              if (preferredCodecs.length > 0) {
+                transceiver.setCodecPreferences(preferredCodecs);
+                console.log('Video codec preferences set:', preferredCodecs.map(c => c.mimeType));
+              }
             }
+          } catch (e) {
+            console.log('Could not set codec preferences (not supported):', e);
           }
+        } else {
+          console.log('setCodecPreferences not supported in this browser');
         }
       }
     });
@@ -182,8 +208,15 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
       console.log("WebSocket connected successfully");
       
       try {
+        // Check if getUserMedia is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("getUserMedia not supported in this browser");
+        }
+        
+        console.log("Requesting camera/microphone access...");
         // Initialize media and peer connection
         const stream = await initializeMedia();
+        console.log("Media stream obtained:", stream);
         const pc = initializePeerConnection(stream);
         
         // Join the call
@@ -197,6 +230,20 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
         setIsConnecting(false);
       } catch (error) {
         console.error("Error initializing media/peer connection:", error);
+        
+        // Provide user-friendly error message
+        if (error instanceof Error) {
+          if (error.name === 'NotAllowedError') {
+            console.error("Camera/microphone access denied by user");
+          } else if (error.name === 'NotFoundError') {
+            console.error("No camera/microphone found");
+          } else if (error.name === 'NotSupportedError') {
+            console.error("WebRTC not supported in this browser");
+          } else {
+            console.error("Unknown error:", error.message);
+          }
+        }
+        
         setIsConnecting(false);
       }
     };
@@ -291,11 +338,13 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
     const newFacingMode = currentFacingMode === "user" ? "environment" : "user";
     
     try {
+      // Use Safari-compatible constraints for camera switching
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: newFacingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { min: 320, ideal: 1280, max: 1920 },
+          height: { min: 240, ideal: 720, max: 1080 },
+          frameRate: { min: 15, ideal: 30, max: 60 },
         },
         audio: false,
       });
@@ -316,6 +365,29 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
       setCurrentFacingMode(newFacingMode);
     } catch (error) {
       console.error("Error switching camera:", error);
+      
+      // Fallback: try with minimal constraints
+      try {
+        const minimalStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: newFacingMode } },
+          audio: false,
+        });
+
+        const newVideoTrack = minimalStream.getVideoTracks()[0];
+        
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === "video");
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        }
+
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        const updatedStream = new MediaStream([newVideoTrack, audioTrack]);
+        setLocalStream(updatedStream);
+        localStreamRef.current = updatedStream;
+        setCurrentFacingMode(newFacingMode);
+      } catch (fallbackError) {
+        console.error("Fallback camera switch also failed:", fallbackError);
+      }
     }
   }, [currentFacingMode]);
 

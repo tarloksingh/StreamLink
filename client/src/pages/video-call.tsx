@@ -263,9 +263,14 @@ export default function VideoCall() {
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          muted={false}
           x-webkit-airplay="allow"
+          webkit-playsinline="true"
           className="absolute inset-0 h-full w-full object-cover"
           data-testid="video-remote"
+          onError={(e) => console.error("Remote video error:", e)}
+          onLoadStart={() => console.log("Remote video loading started")}
+          onCanPlay={() => console.log("Remote video can play")}
         />
       )}
 
@@ -276,12 +281,16 @@ export default function VideoCall() {
         playsInline
         muted
         x-webkit-airplay="allow"
+        webkit-playsinline="true"
         className={
           hasRemotePeer
             ? "absolute bottom-20 right-4 h-32 w-24 rounded-lg object-cover shadow-2xl z-10"
             : "absolute inset-0 h-full w-full object-cover"
         }
         data-testid="video-local"
+        onError={(e) => console.error("Local video error:", e)}
+        onLoadStart={() => console.log("Local video loading started")}
+        onCanPlay={() => console.log("Local video can play")}
       />
 
       {/* Waiting overlay */}
