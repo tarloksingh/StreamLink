@@ -41,11 +41,13 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
           facingMode: { ideal: facingMode },
           width: { ideal: 1920 },
           height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
         },
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          sampleRate: 48000, // Consistent sample rate for better echo cancellation
         },
       };
 
@@ -75,9 +77,37 @@ export function useWebRTC(callId: string): UseWebRTCReturn {
 
     const pc = new RTCPeerConnection(configuration);
 
-    // Add local stream tracks to peer connection
+    // Add local stream tracks to peer connection with H.265 preference
     stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
+      const transceiver = pc.addTransceiver(track, {
+        direction: 'sendrecv',
+        streams: [stream],
+      });
+
+      // Set codec preferences for H.265 if available (Safari)
+      if (track.kind === 'video') {
+        const capabilities = RTCRtpSender.getCapabilities('video');
+        if (capabilities) {
+          const codecs = capabilities.codecs;
+          
+          // Prefer H.265 (HEVC) if available, then H.264
+          const preferredCodecs = [
+            ...codecs.filter(c => c.mimeType.toLowerCase().includes('h265') || c.mimeType.toLowerCase().includes('hevc')),
+            ...codecs.filter(c => c.mimeType.toLowerCase().includes('h264') || c.mimeType.toLowerCase().includes('avc')),
+            ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp9')),
+            ...codecs.filter(c => c.mimeType.toLowerCase().includes('vp8')),
+          ];
+
+          if (preferredCodecs.length > 0) {
+            try {
+              transceiver.setCodecPreferences(preferredCodecs);
+              console.log('Video codec preferences set:', preferredCodecs.map(c => c.mimeType));
+            } catch (e) {
+              console.log('Could not set codec preferences:', e);
+            }
+          }
+        }
+      }
     });
 
     // Handle incoming remote stream

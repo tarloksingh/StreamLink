@@ -72,9 +72,10 @@ shared/
 ## WebRTC Implementation
 - **Signaling**: WebSocket server relays offer/answer/ICE candidates
 - **STUN Servers**: Google STUN servers for NAT traversal
-- **Video Constraints**: 1920x1080 ideal, rear camera preferred
-- **Audio**: Echo cancellation, noise suppression enabled
-- **Codec Preference**: Browser automatically negotiates H.265/H.264
+- **Video Constraints**: 1920x1080@30fps ideal, rear camera preferred
+- **Audio**: Echo cancellation, noise suppression, auto gain control enabled (48kHz sample rate)
+- **Codec Preference**: H.265 (HEVC) preferred on Safari, falls back to H.264 → VP9 → VP8
+- **AirPlay Support**: Native Safari AirPlay button enabled via x-webkit-airplay attribute
 
 ## Mobile Optimizations
 - Full-screen API for immersive experience
@@ -83,7 +84,10 @@ shared/
 - Safe area padding for notched devices
 - Touch-friendly control spacing
 
-## Recent Changes (Oct 18, 2025)
+## Recent Changes (Oct 19, 2025)
+- **Added H.265 (HEVC) codec support** with automatic fallback to H.264
+- **Added native Safari AirPlay support** via WebKit API (x-webkit-airplay attribute)
+- **Optimized audio settings** for better echo cancellation (48kHz sample rate)
 - Initial implementation with complete MVP features
 - WebRTC peer-to-peer video calling
 - WebSocket signaling server

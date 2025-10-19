@@ -166,6 +166,7 @@ export default function VideoCall() {
           ref={remoteVideoRef}
           autoPlay
           playsInline
+          x-webkit-airplay="allow"
           className="absolute inset-0 h-full w-full object-cover"
           data-testid="video-remote"
         />
@@ -177,6 +178,7 @@ export default function VideoCall() {
         autoPlay
         playsInline
         muted
+        x-webkit-airplay="allow"
         className={
           hasRemotePeer
             ? "absolute bottom-20 right-4 h-32 w-24 rounded-lg object-cover shadow-2xl z-10"
