@@ -11,8 +11,9 @@ A minimalist web-based video calling application with H.264/H.265 codec support,
 - **AirPlay Prompt**: Helpful overlay reminding users to connect to TV via AirPlay
 - **WebRTC P2P**: Direct peer-to-peer connection for low latency
 - **Codec Negotiation**: Attempts H.265 (HEVC) first, falls back to H.264
-- **Call Controls**: Mute, camera flip, end call, share link
+- **Call Controls**: Mute, camera flip, full screen toggle, end call, share link
 - **Connection Status**: Quality indicator and call duration display
+- **Auto Full Screen**: Automatically enters full screen when peer connects, with manual toggle button
 
 ## Tech Stack
 ### Frontend
@@ -39,7 +40,7 @@ client/
       video-call.tsx     - Main video call interface
     components/
       airplay-prompt.tsx       - AirPlay connection reminder overlay
-      call-controls.tsx        - Mute, camera, end call buttons
+      call-controls.tsx        - Mute, camera, full screen, end call buttons
       connection-status.tsx    - Quality indicator and duration
       waiting-overlay.tsx      - Shown while waiting for peer
     hooks/
@@ -59,8 +60,10 @@ shared/
 5. User shares link via native share API or copy
 6. Recipient opens link, joins same call ID
 7. WebRTC peer connection established
-8. Users see each other full-screen
-9. Call controls available at bottom (auto-hide after 3s)
+8. Video automatically enters full screen mode
+9. Users see each other full-screen
+10. Call controls available at bottom (auto-hide after 3s)
+11. Full screen can be toggled manually via Maximize/Minimize button
 
 ## Design System
 - **Colors**: Dark mode primary (near black backgrounds), blue primary CTAs, green success indicators
@@ -85,6 +88,7 @@ shared/
 - Touch-friendly control spacing
 
 ## Recent Changes (Oct 19, 2025)
+- **Added manual full screen toggle button** with Maximize/Minimize icon in call controls
 - **Added H.265 (HEVC) codec support** with automatic fallback to H.264
 - **Added native Safari AirPlay support** via WebKit API (x-webkit-airplay attribute)
 - **Optimized audio settings** for better echo cancellation (48kHz sample rate)
