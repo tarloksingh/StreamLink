@@ -58,9 +58,9 @@ export default function VideoCall() {
     }
   }, [remoteStream]);
 
-  // Set up AirPlay-specific video element
+  // Set up AirPlay-specific video element - FOCUS ON LOCAL STREAM ONLY
   useEffect(() => {
-    if (airplayVideoRef.current) {
+    if (airplayVideoRef.current && localStream) {
       const airplayVideo = airplayVideoRef.current;
       
       // Configure for AirPlay video streaming (not screen mirroring)
@@ -71,18 +71,17 @@ export default function VideoCall() {
       airplayVideo.setAttribute('muted', 'false');
       airplayVideo.setAttribute('preload', 'auto');
       
-      // Set the stream to the AirPlay video - prioritize local stream for testing
-      const activeStream = localStream || remoteStream;
-      if (activeStream && airplayVideo.srcObject !== activeStream) {
-        airplayVideo.srcObject = activeStream;
-        console.log('AirPlay video configured with stream:', activeStream);
-        console.log('Stream tracks:', activeStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+      // ONLY use local stream for AirPlay
+      if (localStream && airplayVideo.srcObject !== localStream) {
+        airplayVideo.srcObject = localStream;
         
         // Force the video to play for AirPlay detection
-        airplayVideo.play().catch(console.error);
+        airplayVideo.play().then(() => {
+          console.log('AirPlay video playing with local stream');
+        }).catch(console.error);
       }
     }
-  }, [remoteStream, localStream, hasRemotePeer]);
+  }, [localStream]);
 
   // Set up AirPlay detection
   useEffect(() => {
@@ -92,16 +91,8 @@ export default function VideoCall() {
     // Check if WebKit AirPlay API is available
     if ('WebKitPlaybackTargetAvailabilityEvent' in window) {
       const handleAvailabilityChange = (event: any) => {
-        console.log('AirPlay availability changed:', event.availability);
-        console.log('Video element for AirPlay:', video);
-        console.log('Video srcObject:', video.srcObject);
-        console.log('Video paused:', video.paused);
-        console.log('Video readyState:', video.readyState);
-        
-        // Only show AirPlay button if there's video content and AirPlay is available
-        const hasVideoContent = localStream || remoteStream;
-        const shouldShowButton = event.availability === 'available' && !!hasVideoContent;
-        console.log('Should show AirPlay button:', shouldShowButton, { availability: event.availability, hasVideoContent });
+        // Only show AirPlay button if there's LOCAL video content and AirPlay is available
+        const shouldShowButton = event.availability === 'available' && !!localStream;
         setShowAirPlayButton(shouldShowButton);
       };
 
@@ -109,44 +100,24 @@ export default function VideoCall() {
         const video = airplayVideoRef.current;
         if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
           const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
-          console.log('AirPlay wireless state changed:', isWireless);
           setIsAirPlayActive(isWireless);
         }
       };
 
-      // Additional AirPlay event handlers
-      const handleAirPlayStart = () => {
-        console.log('AirPlay started - video streaming to TV');
-      };
-
-      const handleAirPlayStop = () => {
-        console.log('AirPlay stopped - video streaming back to device');
-      };
-
       video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
       video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-      video.addEventListener('webkitbeginfullscreen', handleAirPlayStart);
-      video.addEventListener('webkitendfullscreen', handleAirPlayStop);
 
       // Trigger initial availability check
       setTimeout(() => {
-        console.log('Triggering initial AirPlay availability check');
         video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
-        
-        // Also manually check availability
-        if ('webkitCurrentPlaybackTargetIsWireless' in video) {
-          console.log('Current playback target is wireless:', (video as any).webkitCurrentPlaybackTargetIsWireless);
-        }
       }, 500);
 
       return () => {
         video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
         video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-        video.removeEventListener('webkitbeginfullscreen', handleAirPlayStart);
-        video.removeEventListener('webkitendfullscreen', handleAirPlayStop);
       };
     }
-  }, [localStream, remoteStream]);
+  }, [localStream]);
 
   // Show AirPlay prompt when rear camera is detected
   useEffect(() => {
@@ -303,19 +274,12 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    // Use the dedicated AirPlay video element
+    // Use the dedicated AirPlay video element - FOCUS ON LOCAL STREAM ONLY
     const video = airplayVideoRef.current;
-    if (video && 'webkitShowPlaybackTargetPicker' in video) {
-      console.log('Showing AirPlay picker for video streaming:', video);
-      console.log('Video srcObject:', video.srcObject);
-      console.log('Video paused:', video.paused);
-      console.log('Video readyState:', video.readyState);
-      
-      // Ensure the AirPlay video has the current stream
-      const activeStream = hasRemotePeer ? remoteStream : localStream;
-      if (activeStream && video.srcObject !== activeStream) {
-        video.srcObject = activeStream;
-        console.log('Updated AirPlay video with current stream');
+    if (video && 'webkitShowPlaybackTargetPicker' in video && localStream) {
+      // Ensure the AirPlay video has the LOCAL stream
+      if (video.srcObject !== localStream) {
+        video.srcObject = localStream;
       }
       
       // Force video to be recognized as a video stream for AirPlay
@@ -326,17 +290,13 @@ export default function VideoCall() {
       
       // Ensure video has proper dimensions for AirPlay
       if (video.videoWidth === 0 || video.videoHeight === 0) {
-        console.log('Video dimensions not ready, waiting...');
         video.addEventListener('loadedmetadata', () => {
-          console.log('Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
           triggerAirPlayPicker(video);
         }, { once: true });
         return;
       }
       
       triggerAirPlayPicker(video);
-    } else {
-      console.warn('AirPlay not available or video element not found');
     }
   };
 
@@ -344,59 +304,29 @@ export default function VideoCall() {
     // Ensure the video is playing and ready
     if (video.paused) {
       video.play().then(() => {
-        console.log('Video playing, showing AirPlay picker');
         showAirPlayPickerInternal(video);
-      }).catch((error) => {
-        console.error('Failed to play video for AirPlay:', error);
+      }).catch(() => {
         showAirPlayPickerInternal(video);
       });
     } else {
-      console.log('Video already playing, showing AirPlay picker');
       showAirPlayPickerInternal(video);
     }
   };
 
   const showAirPlayPickerInternal = (video: HTMLVideoElement) => {
-    // For proper AirPlay video streaming (not screen mirroring), we need to ensure
-    // the video element is recognized as a media source that can be streamed
-    console.log('AirPlay video element state:', {
-      videoWidth: video.videoWidth,
-      videoHeight: video.videoHeight,
-      readyState: video.readyState,
-      paused: video.paused,
-      srcObject: !!video.srcObject
-    });
-    
-    // Force video to be in a state that AirPlay can recognize for video streaming
-    if (video.videoWidth > 0 && video.videoHeight > 0) {
-      // Video has proper dimensions, proceed with AirPlay video streaming
-      video.currentTime = video.currentTime; // Force a seek to ensure video is active
-      
-      // Ensure video is playing and ready for AirPlay
-      if (video.paused) {
-        video.play().catch(console.error);
-      }
-      
-      // Small delay to ensure video is fully ready
-      setTimeout(() => {
-        try {
-          console.log('Calling webkitShowPlaybackTargetPicker for DIRECT VIDEO STREAMING');
-          (video as any).webkitShowPlaybackTargetPicker();
-        } catch (error) {
-          console.error('Error showing AirPlay picker:', error);
-        }
-      }, 500);
-    } else {
-      console.warn('Video dimensions not available, AirPlay may not work properly');
-      // Still try to show the picker
-      setTimeout(() => {
-        try {
-          (video as any).webkitShowPlaybackTargetPicker();
-        } catch (error) {
-          console.error('Error showing AirPlay picker:', error);
-        }
-      }, 500);
+    // Ensure video is playing and ready for AirPlay
+    if (video.paused) {
+      video.play().catch(console.error);
     }
+    
+    // Show AirPlay picker for video streaming
+    setTimeout(() => {
+      try {
+        (video as any).webkitShowPlaybackTargetPicker();
+      } catch (error) {
+        console.error('Error showing AirPlay picker:', error);
+      }
+    }, 500);
   };
 
   if (isConnecting) {
