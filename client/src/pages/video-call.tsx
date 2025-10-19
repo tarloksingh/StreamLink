@@ -368,7 +368,6 @@ export default function VideoCall() {
           onError={(e) => console.error("Remote video error:", e)}
           onLoadStart={() => console.log("Remote video loading started")}
           onCanPlay={() => console.log("Remote video can play")}
-          onAirPlayChanged={(e) => console.log("AirPlay changed:", e)}
           onPlay={() => console.log("Remote video playing")}
           onPause={() => console.log("Remote video paused")}
           onLoadedMetadata={() => console.log("Remote video metadata loaded")}
@@ -393,7 +392,6 @@ export default function VideoCall() {
         }
         data-testid="video-local"
         onError={(e) => console.error("Local video error:", e)}
-        onAirPlayChanged={(e) => console.log("AirPlay changed:", e)}
         onLoadStart={() => console.log("Local video loading started")}
         onCanPlay={() => console.log("Local video can play")}
         onPlay={() => console.log("Local video playing")}
