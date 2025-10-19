@@ -42,6 +42,7 @@ export default function VideoCall() {
 
   // Detect if this is a viewer joining an existing call
   useEffect(() => {
+    console.log('Stream detection - localStream:', !!localStream, 'remoteStream:', !!remoteStream);
     // If there's a remote stream, we're a viewer
     if (remoteStream) {
       setIsViewer(true);
@@ -64,12 +65,15 @@ export default function VideoCall() {
   }, [localStream]);
 
   useEffect(() => {
+    console.log('Remote video setup - remoteVideoRef:', !!remoteVideoRef.current, 'remoteStream:', !!remoteStream);
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
       // Ensure video is configured for AirPlay
       remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
       remoteVideoRef.current.setAttribute('playsinline', 'true');
       console.log('Remote video stream set up for AirPlay');
+    } else {
+      console.log('Remote video not set up - missing ref or stream');
     }
   }, [remoteStream]);
 
@@ -81,6 +85,7 @@ export default function VideoCall() {
     
     // Show AirPlay button when video stream is available
     const hasVideoStream = (isViewer && remoteStream) || (!isViewer && localStream);
+    console.log('hasVideoStream:', hasVideoStream);
     
     if (hasVideoStream) {
       console.log(`Setting AirPlay button to true - ${isViewer ? 'remote' : 'local'} stream available`);

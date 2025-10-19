@@ -36,7 +36,7 @@ export default function Home() {
               High-quality video calls with AirPlay support
             </p>
             <p className="text-sm font-medium text-primary">
-              Version 5 - Broadcaster/Viewer
+              Version 6 - Broadcaster/Viewer
             </p>
           </div>
         </div>
