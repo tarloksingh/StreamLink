@@ -16,6 +16,7 @@ export default function VideoCall() {
   const containerRef = useRef<HTMLDivElement>(null);
   const airplayVideoRef = useRef<HTMLVideoElement>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -59,58 +60,69 @@ export default function VideoCall() {
     }
   }, [remoteStream]);
 
-  // Create HLS stream URL from WebRTC stream for AirPlay
+  // Create continuous live stream URL for AirPlay
   const createStreamUrl = async (stream: MediaStream) => {
     try {
-      console.log('Starting stream URL creation...');
+      console.log('Creating continuous live stream URL...');
       
-      // Simplified approach - create a blob URL directly from the stream
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm'
+      // Stop existing recorder if any
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+      
+      // Create a new MediaRecorder with the stream
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm; codecs=vp8'
       });
       
       const chunks: Blob[] = [];
       
-      mediaRecorder.ondataavailable = (event) => {
-        console.log('Data available:', event.data.size);
+      recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunks.push(event.data);
+          // Create a new blob URL with all chunks so far
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          setStreamUrl(url);
         }
       };
       
-      mediaRecorder.onstop = () => {
-        console.log('MediaRecorder stopped, creating blob URL...');
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        console.log('Stream URL created:', url);
-        setStreamUrl(url);
-      };
-      
-      mediaRecorder.onerror = (error) => {
+      recorder.onerror = (error) => {
         console.error('MediaRecorder error:', error);
       };
       
-      // Start recording
-      console.log('Starting MediaRecorder...');
-      mediaRecorder.start(1000); // Record in 1-second chunks
+      // Start recording with small time slices for live streaming
+      recorder.start(100); // 100ms slices for near real-time
+      setMediaRecorder(recorder);
       
-      // Stop recording after 3 seconds to create the URL
-      setTimeout(() => {
-        console.log('Stopping MediaRecorder...');
-        mediaRecorder.stop();
-      }, 3000);
+      console.log('Live stream recording started');
       
     } catch (error) {
-      console.error('Error creating stream URL:', error);
+      console.error('Error creating live stream URL:', error);
     }
   };
 
-  // Set up AirPlay-specific video element with URL source
+  // Set up AirPlay-specific video element with MediaStream source
   useEffect(() => {
-    if (localStream) {
-      console.log('Creating stream URL for AirPlay...');
-      // Create stream URL for AirPlay
-      createStreamUrl(localStream);
+    if (airplayVideoRef.current && localStream) {
+      const airplayVideo = airplayVideoRef.current;
+      
+      // Configure for AirPlay video streaming (not screen mirroring)
+      airplayVideo.setAttribute('webkit-airplay', 'allow');
+      airplayVideo.setAttribute('playsinline', 'true');
+      airplayVideo.setAttribute('controls', 'false');
+      airplayVideo.setAttribute('autoplay', 'true');
+      airplayVideo.setAttribute('muted', 'false');
+      airplayVideo.setAttribute('preload', 'auto');
+      
+      // Set the stream and ensure it plays
+      airplayVideo.srcObject = localStream;
+      airplayVideo.muted = false; // Important for AirPlay audio
+      
+      // Force the video to play for AirPlay detection
+      airplayVideo.play().then(() => {
+        console.log('AirPlay video playing with local stream');
+      }).catch(console.error);
     }
   }, [localStream]);
 
@@ -302,27 +314,11 @@ export default function VideoCall() {
     if (video && 'webkitShowPlaybackTargetPicker' in video && localStream) {
       console.log('Showing AirPlay picker...');
       
-      // If we don't have a stream URL yet, create one quickly
-      if (!streamUrl) {
-        console.log('Creating stream URL on demand...');
-        createStreamUrl(localStream);
-        // Wait a bit for the URL to be created
-        setTimeout(() => {
-          if (streamUrl) {
-            video.src = streamUrl;
-          } else {
-            // Fallback to using the MediaStream directly
-            video.srcObject = localStream;
-          }
-          showAirPlayPickerInternal(video);
-        }, 1000);
-      } else {
-        // Use existing stream URL
-        if (video.src !== streamUrl) {
-          video.src = streamUrl;
-        }
-        showAirPlayPickerInternal(video);
-      }
+      // Always use the MediaStream directly for better compatibility
+      video.srcObject = localStream;
+      video.muted = false; // Enable audio for AirPlay
+      
+      showAirPlayPickerInternal(video);
     }
   };
 
@@ -435,9 +431,6 @@ export default function VideoCall() {
         webkit-airplay="allow"
         controls={false}
         preload="auto"
-        crossOrigin="anonymous"
-        poster=""
-        src={streamUrl || undefined}
         className="hidden"
         data-testid="video-airplay"
         onError={(e) => console.error("AirPlay video error:", e)}
