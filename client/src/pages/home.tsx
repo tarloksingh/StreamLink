@@ -8,7 +8,7 @@ interface LiveStream {
   id: string;
   title: string;
   viewerCount: number;
-  thumbnail?: string;
+  thumbnail?: string | null;
 }
 
 export default function Home() {
@@ -26,26 +26,22 @@ export default function Home() {
         if (stored) {
           const streams = JSON.parse(stored);
           setLiveStreams(streams);
+        } else {
+          // Initialize with empty array
+          setLiveStreams([]);
         }
       } catch (error) {
         console.error('Error loading active streams:', error);
+        setLiveStreams([]);
       }
     };
 
     loadActiveStreams();
     
-    // Listen for storage changes (when streams are added/removed)
-    const handleStorageChange = () => {
-      loadActiveStreams();
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Also check periodically for updates
-    const interval = setInterval(loadActiveStreams, 2000);
+    // Check periodically for updates
+    const interval = setInterval(loadActiveStreams, 1000);
     
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
   }, []);
@@ -73,6 +69,9 @@ export default function Home() {
       const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
       currentStreams.push(newStream);
       localStorage.setItem('activeStreams', JSON.stringify(currentStreams));
+      
+      // Update local state immediately
+      setLiveStreams(currentStreams);
       
       setLocation(`/live/${data.streamId}`);
     },
@@ -126,15 +125,14 @@ export default function Home() {
             <div className="col-span-full flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
-          ) : liveStreams.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Video className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams</h3>
-              <p className="text-muted-foreground">Be the first to start a live stream!</p>
-            </div>
           ) : (
-            // Show real active streams
-            liveStreams.map((stream) => (
+            // Show real active streams + demo streams for testing
+            [
+              ...liveStreams,
+              // Add some demo streams for testing
+              { id: 'demo1', title: 'Demo Stream 1', viewerCount: 12, thumbnail: null },
+              { id: 'demo2', title: 'Demo Stream 2', viewerCount: 8, thumbnail: null },
+            ].map((stream) => (
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"

@@ -46,6 +46,13 @@ export default function LiveStream() {
     };
 
     checkUserRole();
+    
+    // Check periodically for role changes
+    const interval = setInterval(checkUserRole, 1000);
+    
+    return () => {
+      clearInterval(interval);
+    };
   }, [streamId]);
 
   // Setup stream only for broadcasters
@@ -150,6 +157,7 @@ export default function LiveStream() {
       const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
       const updatedStreams = currentStreams.filter((stream: any) => stream.id !== streamId);
       localStorage.setItem('activeStreams', JSON.stringify(updatedStreams));
+      console.log('Removed stream from active streams:', streamId);
     } catch (error) {
       console.error('Error removing stream from active streams:', error);
     }
