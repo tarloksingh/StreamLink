@@ -102,9 +102,9 @@ export default function VideoCall() {
     }
   };
 
-  // Set up AirPlay-specific video element with MediaStream source
+  // Set up AirPlay-specific video element with REMOTE stream only (live streamer scenario)
   useEffect(() => {
-    if (airplayVideoRef.current && localStream) {
+    if (airplayVideoRef.current && remoteStream) {
       const airplayVideo = airplayVideoRef.current;
       
       // Configure for AirPlay video streaming (not screen mirroring)
@@ -115,23 +115,23 @@ export default function VideoCall() {
       airplayVideo.setAttribute('muted', 'false');
       airplayVideo.setAttribute('preload', 'auto');
       
-      // Set the stream and ensure it plays
-      airplayVideo.srcObject = localStream;
+      // ONLY use remote stream for AirPlay (avoids camera feed restrictions)
+      airplayVideo.srcObject = remoteStream;
       airplayVideo.muted = false; // Important for AirPlay audio
       
       // Force the video to play for AirPlay detection
       airplayVideo.play().then(() => {
-        console.log('AirPlay video playing with local stream');
+        console.log('AirPlay video playing with remote stream (live streamer scenario)');
       }).catch(console.error);
     }
-  }, [localStream]);
+  }, [remoteStream]);
 
-  // Set up AirPlay detection - Show button when local stream is available
+  // Set up AirPlay detection - Show button ONLY when remote stream is available
   useEffect(() => {
-    console.log('AirPlay detection - localStream:', !!localStream, 'streamUrl:', streamUrl);
-    // Show AirPlay button when local stream is available
-    if (localStream) {
-      console.log('Setting AirPlay button to true');
+    console.log('AirPlay detection - localStream:', !!localStream, 'remoteStream:', !!remoteStream);
+    // Show AirPlay button ONLY when remote stream is available (live streamer scenario)
+    if (remoteStream) {
+      console.log('Setting AirPlay button to true - remote stream available');
       setShowAirPlayButton(true);
       
       // Set up detection for wireless state changes
@@ -311,14 +311,23 @@ export default function VideoCall() {
   const showAirPlayPicker = () => {
     // Use the dedicated AirPlay video element
     const video = airplayVideoRef.current;
-    if (video && 'webkitShowPlaybackTargetPicker' in video && localStream) {
+    if (video && 'webkitShowPlaybackTargetPicker' in video) {
       console.log('Showing AirPlay picker...');
       
-      // Always use the MediaStream directly for better compatibility
-      video.srcObject = localStream;
-      video.muted = false; // Enable audio for AirPlay
-      
-      showAirPlayPickerInternal(video);
+      // ONLY use remote stream for AirPlay (live streamer scenario)
+      // This avoids camera feed restrictions
+      if (remoteStream) {
+        console.log('Using remote stream for AirPlay (live streamer scenario)');
+        
+        // Use the remote stream directly
+        video.srcObject = remoteStream;
+        video.muted = false; // Enable audio for AirPlay
+        
+        showAirPlayPickerInternal(video);
+      } else {
+        console.log('No remote stream available for AirPlay - AirPlay only works with remote streams (live streamer scenario)');
+        alert('AirPlay is only available when viewing someone else\'s stream. This is a limitation of AirPlay with camera feeds.');
+      }
     }
   };
 
