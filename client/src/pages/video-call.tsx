@@ -71,11 +71,15 @@ export default function VideoCall() {
       airplayVideo.setAttribute('muted', 'false');
       airplayVideo.setAttribute('preload', 'auto');
       
-      // Set the stream to the AirPlay video
-      const activeStream = hasRemotePeer ? remoteStream : localStream;
+      // Set the stream to the AirPlay video - prioritize local stream for testing
+      const activeStream = localStream || remoteStream;
       if (activeStream && airplayVideo.srcObject !== activeStream) {
         airplayVideo.srcObject = activeStream;
-        console.log('AirPlay video configured with stream');
+        console.log('AirPlay video configured with stream:', activeStream);
+        console.log('Stream tracks:', activeStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+        
+        // Force the video to play for AirPlay detection
+        airplayVideo.play().catch(console.error);
       }
     }
   }, [remoteStream, localStream, hasRemotePeer]);
@@ -89,13 +93,20 @@ export default function VideoCall() {
     if ('WebKitPlaybackTargetAvailabilityEvent' in window) {
       const handleAvailabilityChange = (event: any) => {
         console.log('AirPlay availability changed:', event.availability);
+        console.log('Video element for AirPlay:', video);
+        console.log('Video srcObject:', video.srcObject);
+        console.log('Video paused:', video.paused);
+        console.log('Video readyState:', video.readyState);
+        
         // Only show AirPlay button if there's video content and AirPlay is available
         const hasVideoContent = localStream || remoteStream;
-        setShowAirPlayButton(event.availability === 'available' && !!hasVideoContent);
+        const shouldShowButton = event.availability === 'available' && !!hasVideoContent;
+        console.log('Should show AirPlay button:', shouldShowButton, { availability: event.availability, hasVideoContent });
+        setShowAirPlayButton(shouldShowButton);
       };
 
       const handleWirelessChange = () => {
-        const video = remoteVideoRef.current || localVideoRef.current;
+        const video = airplayVideoRef.current;
         if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
           const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
           console.log('AirPlay wireless state changed:', isWireless);
@@ -119,8 +130,14 @@ export default function VideoCall() {
 
       // Trigger initial availability check
       setTimeout(() => {
+        console.log('Triggering initial AirPlay availability check');
         video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
-      }, 100);
+        
+        // Also manually check availability
+        if ('webkitCurrentPlaybackTargetIsWireless' in video) {
+          console.log('Current playback target is wireless:', (video as any).webkitCurrentPlaybackTargetIsWireless);
+        }
+      }, 500);
 
       return () => {
         video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
