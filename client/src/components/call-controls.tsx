@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, SwitchCamera, PhoneOff, Share2, Check, Maximize, Minimize } from "lucide-react";
+import { Mic, MicOff, SwitchCamera, PhoneOff, Share2, Check, Maximize, Minimize, Airplay } from "lucide-react";
 import { useState } from "react";
 
 interface CallControlsProps {
@@ -9,7 +9,10 @@ interface CallControlsProps {
   onEndCall: () => void;
   onShareLink: () => void;
   onToggleFullScreen: () => void;
+  onShowAirPlay: () => void;
   isFullScreen: boolean;
+  showAirPlayButton: boolean;
+  isAirPlayActive: boolean;
   hasRemotePeer: boolean;
   className?: string;
 }
@@ -21,7 +24,10 @@ export function CallControls({
   onEndCall,
   onShareLink,
   onToggleFullScreen,
+  onShowAirPlay,
   isFullScreen,
+  showAirPlayButton,
+  isAirPlayActive,
   hasRemotePeer,
   className = "",
 }: CallControlsProps) {
@@ -80,6 +86,19 @@ export function CallControls({
               <Maximize className="h-6 w-6" />
             )}
           </Button>
+
+          {/* AirPlay button (only when AirPlay devices available) */}
+          {showAirPlayButton && (
+            <Button
+              size="icon"
+              variant={isAirPlayActive ? "default" : "secondary"}
+              className="h-14 w-14 rounded-full shadow-lg"
+              onClick={onShowAirPlay}
+              data-testid="button-airplay"
+            >
+              <Airplay className="h-6 w-6" />
+            </Button>
+          )}
 
           {/* End call button */}
           <Button

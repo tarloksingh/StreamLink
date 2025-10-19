@@ -11,7 +11,7 @@ A minimalist web-based video calling application with H.264/H.265 codec support,
 - **AirPlay Prompt**: Helpful overlay reminding users to connect to TV via AirPlay
 - **WebRTC P2P**: Direct peer-to-peer connection for low latency
 - **Codec Negotiation**: Attempts H.265 (HEVC) first, falls back to H.264
-- **Call Controls**: Mute, camera flip, full screen toggle, end call, share link
+- **Call Controls**: Mute, camera flip, full screen toggle, AirPlay, end call, share link
 - **Connection Status**: Quality indicator and call duration display
 - **Auto Full Screen**: Automatically enters full screen when peer connects, with manual toggle button
 
@@ -40,7 +40,7 @@ client/
       video-call.tsx     - Main video call interface
     components/
       airplay-prompt.tsx       - AirPlay connection reminder overlay
-      call-controls.tsx        - Mute, camera, full screen, end call buttons
+      call-controls.tsx        - Mute, camera, full screen, AirPlay, end call buttons
       connection-status.tsx    - Quality indicator and duration
       waiting-overlay.tsx      - Shown while waiting for peer
     hooks/
@@ -78,7 +78,8 @@ shared/
 - **Video Constraints**: 1920x1080@30fps ideal, rear camera preferred
 - **Audio**: Echo cancellation, noise suppression, auto gain control enabled (48kHz sample rate)
 - **Codec Preference**: H.265 (HEVC) preferred on Safari, falls back to H.264 → VP9 → VP8
-- **AirPlay Support**: Native Safari AirPlay button enabled via x-webkit-airplay attribute
+- **AirPlay Support**: Native AirPlay button in video controls using webkitShowPlaybackTargetPicker() API
+- **Mobile Fullscreen**: Uses webkitEnterFullscreen() for iOS video fullscreen, standard API for desktop
 
 ## Mobile Optimizations
 - Full-screen API for immersive experience
@@ -88,9 +89,10 @@ shared/
 - Touch-friendly control spacing
 
 ## Recent Changes (Oct 19, 2025)
+- **Fixed mobile fullscreen** to use webkitEnterFullscreen() for iOS Safari video element fullscreen
+- **Added native AirPlay button** in video controls using webkitShowPlaybackTargetPicker() - appears when AirPlay devices available
 - **Added manual full screen toggle button** with Maximize/Minimize icon in call controls
 - **Added H.265 (HEVC) codec support** with automatic fallback to H.264
-- **Added native Safari AirPlay support** via WebKit API (x-webkit-airplay attribute)
 - **Optimized audio settings** for better echo cancellation (48kHz sample rate)
 - Initial implementation with complete MVP features
 - WebRTC peer-to-peer video calling

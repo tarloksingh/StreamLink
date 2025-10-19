@@ -19,6 +19,8 @@ export default function VideoCall() {
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showAirPlayButton, setShowAirPlayButton] = useState(false);
+  const [isAirPlayActive, setIsAirPlayActive] = useState(false);
 
   const {
     localStream,
@@ -46,6 +48,34 @@ export default function VideoCall() {
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
+
+  // Set up AirPlay detection
+  useEffect(() => {
+    const video = remoteVideoRef.current || localVideoRef.current;
+    if (!video) return;
+
+    // Check if WebKit AirPlay API is available
+    if ('WebKitPlaybackTargetAvailabilityEvent' in window) {
+      const handleAvailabilityChange = (event: any) => {
+        setShowAirPlayButton(event.availability === 'available');
+      };
+
+      const handleWirelessChange = () => {
+        const video = remoteVideoRef.current || localVideoRef.current;
+        if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
+          setIsAirPlayActive((video as any).webkitCurrentPlaybackTargetIsWireless);
+        }
+      };
+
+      video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
+      video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+
+      return () => {
+        video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
+        video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+      };
+    }
+  }, [localStream, remoteStream]);
 
   // Show AirPlay prompt when rear camera is detected
   useEffect(() => {
@@ -89,13 +119,21 @@ export default function VideoCall() {
     };
   }, [hasRemotePeer]);
 
-  // Request fullscreen
+  // Request fullscreen and track fullscreen state
   useEffect(() => {
     const enterFullScreen = async () => {
       try {
-        const element = containerRef.current;
-        if (element && element.requestFullscreen) {
-          await element.requestFullscreen();
+        // For iOS Safari, use video element fullscreen
+        const video = remoteVideoRef.current;
+        if (video && 'webkitEnterFullscreen' in video) {
+          (video as any).webkitEnterFullscreen();
+        } 
+        // Fall back to standard fullscreen API for desktop
+        else {
+          const element = containerRef.current;
+          if (element && element.requestFullscreen) {
+            await element.requestFullscreen();
+          }
         }
       } catch (err) {
         console.log("Fullscreen not supported or denied:", err);
@@ -106,14 +144,33 @@ export default function VideoCall() {
       enterFullScreen();
     }
 
-    // Listen for fullscreen changes
+    // Listen for fullscreen changes (standard API)
     const handleFullscreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
     };
 
+    // Listen for webkit fullscreen changes (iOS)
+    const handleWebkitFullscreenChange = () => {
+      const video = remoteVideoRef.current || localVideoRef.current;
+      if (video && 'webkitDisplayingFullscreen' in video) {
+        setIsFullScreen(!!(video as any).webkitDisplayingFullscreen);
+      }
+    };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
+    const video = remoteVideoRef.current || localVideoRef.current;
+    if (video) {
+      video.addEventListener('webkitbeginfullscreen', () => setIsFullScreen(true));
+      video.addEventListener('webkitendfullscreen', () => setIsFullScreen(false));
+    }
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      if (video) {
+        video.removeEventListener('webkitbeginfullscreen', () => setIsFullScreen(true));
+        video.removeEventListener('webkitendfullscreen', () => setIsFullScreen(false));
+      }
     };
   }, [hasRemotePeer]);
 
@@ -145,7 +202,19 @@ export default function VideoCall() {
 
   const toggleFullScreen = async () => {
     try {
-      if (!document.fullscreenElement) {
+      // For iOS Safari, use video element fullscreen
+      const video = remoteVideoRef.current || localVideoRef.current;
+      
+      // Check if we're on iOS/mobile Safari (video element fullscreen)
+      if (video && 'webkitEnterFullscreen' in video) {
+        if (!(video as any).webkitDisplayingFullscreen) {
+          (video as any).webkitEnterFullscreen();
+        } else if ('webkitExitFullscreen' in video) {
+          (video as any).webkitExitFullscreen();
+        }
+      }
+      // Fall back to standard fullscreen API for desktop
+      else if (!document.fullscreenElement) {
         const element = containerRef.current;
         if (element && element.requestFullscreen) {
           await element.requestFullscreen();
@@ -159,6 +228,13 @@ export default function VideoCall() {
       } else {
         console.error('Failed to toggle fullscreen:', err);
       }
+    }
+  };
+
+  const showAirPlayPicker = () => {
+    const video = remoteVideoRef.current || localVideoRef.current;
+    if (video && 'webkitShowPlaybackTargetPicker' in video) {
+      (video as any).webkitShowPlaybackTargetPicker();
     }
   };
 
@@ -233,7 +309,10 @@ export default function VideoCall() {
         onEndCall={endCall}
         onShareLink={shareLink}
         onToggleFullScreen={toggleFullScreen}
+        onShowAirPlay={showAirPlayPicker}
         isFullScreen={isFullScreen}
+        showAirPlayButton={showAirPlayButton}
+        isAirPlayActive={isAirPlayActive}
         hasRemotePeer={hasRemotePeer}
         className={showControls ? "translate-y-0" : "translate-y-full"}
       />
