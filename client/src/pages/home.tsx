@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { Loader2, Video, Plus, Eye } from "lucide-react";
 
 interface LiveStream {
@@ -15,23 +14,24 @@ interface LiveStream {
 export default function Home() {
   const [, setLocation] = useLocation();
 
-  // Fetch live streams
-  const { data: liveStreams = [], isLoading } = useQuery({
-    queryKey: ["live-streams"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/live-streams", {});
-      return await response.json() as LiveStream[];
-    },
-    refetchInterval: 5000, // Refresh every 5 seconds
-  });
+  // For now, we'll use a simple approach without backend
+  const [liveStreams] = useState<LiveStream[]>([]);
+  const [isLoading] = useState(false);
 
   const createStreamMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/live-streams/create", {});
-      return await response.json() as { streamId: string };
+      console.log('Creating live stream...');
+      // Generate a simple stream ID
+      const streamId = Math.random().toString(36).substring(7);
+      console.log('Generated stream ID:', streamId);
+      return { streamId };
     },
     onSuccess: (data) => {
+      console.log('Stream created successfully, navigating to:', `/live/${data.streamId}`);
       setLocation(`/live/${data.streamId}`);
+    },
+    onError: (error) => {
+      console.error('Error creating stream:', error);
     },
   });
 
@@ -53,7 +53,10 @@ export default function Home() {
           <Button
             size="lg"
             className="h-12 px-6 rounded-xl text-lg font-medium shadow-lg"
-            onClick={() => createStreamMutation.mutate()}
+            onClick={() => {
+              console.log('Start Live button clicked');
+              createStreamMutation.mutate();
+            }}
             disabled={createStreamMutation.isPending}
             data-testid="button-start-live"
           >
