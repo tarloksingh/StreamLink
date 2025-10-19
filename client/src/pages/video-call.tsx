@@ -57,18 +57,26 @@ export default function VideoCall() {
     // Check if WebKit AirPlay API is available
     if ('WebKitPlaybackTargetAvailabilityEvent' in window) {
       const handleAvailabilityChange = (event: any) => {
-        setShowAirPlayButton(event.availability === 'available');
+        console.log('AirPlay availability changed:', event.availability);
+        // Only show AirPlay button if there's video content and AirPlay is available
+        const hasVideoContent = localStream || remoteStream;
+        setShowAirPlayButton(event.availability === 'available' && !!hasVideoContent);
       };
 
       const handleWirelessChange = () => {
         const video = remoteVideoRef.current || localVideoRef.current;
         if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
-          setIsAirPlayActive((video as any).webkitCurrentPlaybackTargetIsWireless);
+          const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
+          console.log('AirPlay wireless state changed:', isWireless);
+          setIsAirPlayActive(isWireless);
         }
       };
 
       video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
       video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+
+      // Trigger initial availability check
+      video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
 
       return () => {
         video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
@@ -232,9 +240,30 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    const video = remoteVideoRef.current || localVideoRef.current;
+    // Use the video that's currently displaying the main content
+    const video = hasRemotePeer ? remoteVideoRef.current : localVideoRef.current;
     if (video && 'webkitShowPlaybackTargetPicker' in video) {
-      (video as any).webkitShowPlaybackTargetPicker();
+      console.log('Showing AirPlay picker for video:', video);
+      console.log('Video srcObject:', video.srcObject);
+      console.log('Video paused:', video.paused);
+      
+      // Ensure the video is playing before showing AirPlay picker
+      if (video.paused) {
+        video.play().then(() => {
+          console.log('Video playing, showing AirPlay picker');
+          (video as any).webkitShowPlaybackTargetPicker();
+        }).catch((error) => {
+          console.error('Failed to play video for AirPlay:', error);
+          // Still try to show the picker even if play fails
+          console.log('Showing AirPlay picker despite play failure');
+          (video as any).webkitShowPlaybackTargetPicker();
+        });
+      } else {
+        console.log('Video already playing, showing AirPlay picker');
+        (video as any).webkitShowPlaybackTargetPicker();
+      }
+    } else {
+      console.warn('AirPlay not available or video element not found');
     }
   };
 
@@ -264,13 +293,16 @@ export default function VideoCall() {
           autoPlay
           playsInline
           muted={false}
-          x-webkit-airplay="allow"
-          webkit-playsinline="true"
+          webkit-airplay="allow"
+          controls={false}
           className="absolute inset-0 h-full w-full object-cover"
           data-testid="video-remote"
           onError={(e) => console.error("Remote video error:", e)}
           onLoadStart={() => console.log("Remote video loading started")}
           onCanPlay={() => console.log("Remote video can play")}
+          onAirPlayChanged={(e) => console.log("AirPlay changed:", e)}
+          onPlay={() => console.log("Remote video playing")}
+          onPause={() => console.log("Remote video paused")}
         />
       )}
 
@@ -280,8 +312,8 @@ export default function VideoCall() {
         autoPlay
         playsInline
         muted
-        x-webkit-airplay="allow"
-        webkit-playsinline="true"
+        webkit-airplay="allow"
+        controls={false}
         className={
           hasRemotePeer
             ? "absolute bottom-20 right-4 h-32 w-24 rounded-lg object-cover shadow-2xl z-10"
@@ -289,8 +321,11 @@ export default function VideoCall() {
         }
         data-testid="video-local"
         onError={(e) => console.error("Local video error:", e)}
+        onAirPlayChanged={(e) => console.log("AirPlay changed:", e)}
         onLoadStart={() => console.log("Local video loading started")}
         onCanPlay={() => console.log("Local video can play")}
+        onPlay={() => console.log("Local video playing")}
+        onPause={() => console.log("Local video paused")}
       />
 
       {/* Waiting overlay */}

@@ -34,13 +34,16 @@ export function AirPlayPrompt({ onDismiss }: AirPlayPromptProps) {
               Connect to Your TV
             </h2>
             <p className="text-base text-muted-foreground">
-              Look for the AirPlay icon in the video controls or tap the screen and select your TV from Safari's media controls
+              Look for the AirPlay icon in the video controls below. Tap it to select your Apple TV or AirPlay-compatible device.
             </p>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
             <p className="text-sm text-muted-foreground">
-              On iPhone: Swipe down from top-right corner → Screen Mirroring → Select your Apple TV
+              <strong>For video streaming:</strong> Make sure you're connected to a call and video is playing before using AirPlay.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <strong>Alternative:</strong> Swipe down from top-right corner → Screen Mirroring → Select your Apple TV
             </p>
           </div>
         </div>
