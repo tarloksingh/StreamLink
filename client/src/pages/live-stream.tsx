@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
-import { X, PhoneOff } from "lucide-react";
+import { X, PhoneOff, Share2, Copy } from "lucide-react";
 
 export default function LiveStream() {
   const [, params] = useRoute("/live/:streamId");
@@ -16,6 +16,7 @@ export default function LiveStream() {
   const [showAirPlayButton, setShowAirPlayButton] = useState(false);
   const [isAirPlayActive, setIsAirPlayActive] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Simple media stream setup
   useEffect(() => {
@@ -74,6 +75,34 @@ export default function LiveStream() {
     }, 3000);
     
     setControlsTimeout(timeout);
+  };
+
+  // Share stream link
+  const shareStream = async () => {
+    const streamUrl = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Live Stream',
+          text: 'Check out my live stream!',
+          url: streamUrl,
+        });
+      } else {
+        await navigator.clipboard.writeText(streamUrl);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      // Fallback to copying to clipboard
+      try {
+        await navigator.clipboard.writeText(streamUrl);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+      } catch (clipboardError) {
+        console.error('Clipboard error:', clipboardError);
+      }
+    }
   };
 
   // End live stream
@@ -176,6 +205,21 @@ export default function LiveStream() {
         <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 p-4 pb-safe">
           <div className="flex items-center justify-center gap-4">
             
+            {/* Share button */}
+            <Button
+              size="icon"
+              variant="secondary"
+              className="h-14 w-14 rounded-full shadow-lg"
+              onClick={shareStream}
+              data-testid="button-share"
+            >
+              {linkCopied ? (
+                <Copy className="h-6 w-6" />
+              ) : (
+                <Share2 className="h-6 w-6" />
+              )}
+            </Button>
+
             {/* AirPlay button */}
             {showAirPlayButton && (
               <Button

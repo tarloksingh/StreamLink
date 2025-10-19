@@ -87,7 +87,12 @@ export default function Home() {
               <p className="text-muted-foreground">Be the first to start a live stream!</p>
             </div>
           ) : (
-            liveStreams.map((stream) => (
+            // Show demo streams for now
+            [
+              { id: 'demo1', title: 'Demo Stream 1', viewerCount: 12 },
+              { id: 'demo2', title: 'Demo Stream 2', viewerCount: 8 },
+              { id: 'demo3', title: 'Demo Stream 3', viewerCount: 25 },
+            ].map((stream) => (
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"
@@ -95,15 +100,7 @@ export default function Home() {
                 data-testid={`live-stream-${stream.id}`}
               >
                 <div className="aspect-video bg-muted rounded-lg mb-4 flex items-center justify-center">
-                  {stream.thumbnail ? (
-                    <img
-                      src={stream.thumbnail}
-                      alt={stream.title}
-                      className="w-full h-full object-cover rounded-lg"
-                    />
-                  ) : (
-                    <Video className="h-12 w-12 text-muted-foreground" />
-                  )}
+                  <Video className="h-12 w-12 text-muted-foreground" />
                 </div>
                 <h3 className="font-semibold text-foreground mb-2">{stream.title}</h3>
                 <div className="flex items-center text-sm text-muted-foreground">
