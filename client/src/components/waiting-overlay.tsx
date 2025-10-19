@@ -23,10 +23,10 @@ export function WaitingOverlay({ onShareLink }: WaitingOverlayProps) {
             <div className="h-12 w-12 animate-pulse rounded-full bg-primary/20" />
           </div>
           <h2 className="text-2xl font-semibold text-white">
-            Waiting for other person to join...
+            Ready to Stream
           </h2>
           <p className="text-base text-white/80">
-            Share the link below to start the call
+            Share the link below to start broadcasting
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export function WaitingOverlay({ onShareLink }: WaitingOverlayProps) {
           ) : (
             <>
               <Share2 className="mr-2 h-5 w-5" />
-              Share Link
+              Share Stream Link
             </>
           )}
         </Button>
