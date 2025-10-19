@@ -14,9 +14,6 @@ export default function VideoCall() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const airplayVideoRef = useRef<HTMLVideoElement>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -60,82 +57,18 @@ export default function VideoCall() {
     }
   }, [remoteStream]);
 
-  // Create continuous live stream URL for AirPlay
-  const createStreamUrl = async (stream: MediaStream) => {
-    try {
-      console.log('Creating continuous live stream URL...');
-      
-      // Stop existing recorder if any
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-      }
-      
-      // Create a new MediaRecorder with the stream
-      const recorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm; codecs=vp8'
-      });
-      
-      const chunks: Blob[] = [];
-      
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-          // Create a new blob URL with all chunks so far
-          const blob = new Blob(chunks, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
-          setStreamUrl(url);
-        }
-      };
-      
-      recorder.onerror = (error) => {
-        console.error('MediaRecorder error:', error);
-      };
-      
-      // Start recording with small time slices for live streaming
-      recorder.start(100); // 100ms slices for near real-time
-      setMediaRecorder(recorder);
-      
-      console.log('Live stream recording started');
-      
-    } catch (error) {
-      console.error('Error creating live stream URL:', error);
-    }
-  };
 
-  // Set up AirPlay-specific video element with REMOTE stream only (live streamer scenario)
-  useEffect(() => {
-    if (airplayVideoRef.current && remoteStream) {
-      const airplayVideo = airplayVideoRef.current;
-      
-      // Configure for AirPlay video streaming (not screen mirroring)
-      airplayVideo.setAttribute('webkit-airplay', 'allow');
-      airplayVideo.setAttribute('playsinline', 'true');
-      airplayVideo.setAttribute('controls', 'false');
-      airplayVideo.setAttribute('autoplay', 'true');
-      airplayVideo.setAttribute('muted', 'false');
-      airplayVideo.setAttribute('preload', 'auto');
-      
-      // ONLY use remote stream for AirPlay (avoids camera feed restrictions)
-      airplayVideo.srcObject = remoteStream;
-      airplayVideo.muted = false; // Important for AirPlay audio
-      
-      // Force the video to play for AirPlay detection
-      airplayVideo.play().then(() => {
-        console.log('AirPlay video playing with remote stream (live streamer scenario)');
-      }).catch(console.error);
-    }
-  }, [remoteStream]);
 
-  // Set up AirPlay detection - Show button ONLY when remote stream is available
+  // Set up AirPlay detection - Show button when any video stream is available
   useEffect(() => {
     console.log('AirPlay detection - localStream:', !!localStream, 'remoteStream:', !!remoteStream);
-    // Show AirPlay button ONLY when remote stream is available (live streamer scenario)
-    if (remoteStream) {
-      console.log('Setting AirPlay button to true - remote stream available');
+    // Show AirPlay button when any video stream is available
+    if (localStream || remoteStream) {
+      console.log('Setting AirPlay button to true - video stream available');
       setShowAirPlayButton(true);
       
       // Set up detection for wireless state changes
-      const video = airplayVideoRef.current;
+      const video = remoteVideoRef.current || localVideoRef.current;
       if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
         const handleWirelessChange = () => {
           const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
@@ -149,10 +82,10 @@ export default function VideoCall() {
         };
       }
     } else {
-      console.log('Setting AirPlay button to false');
+      console.log('Setting AirPlay button to false - no video stream available');
       setShowAirPlayButton(false);
     }
-  }, [localStream, streamUrl]);
+  }, [localStream, remoteStream]);
 
   // Show AirPlay prompt when rear camera is detected
   useEffect(() => {
@@ -309,57 +242,38 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    // Use the dedicated AirPlay video element
-    const video = airplayVideoRef.current;
+    // Use the main video element for AirPlay (simpler approach)
+    const video = remoteVideoRef.current || localVideoRef.current;
     if (video && 'webkitShowPlaybackTargetPicker' in video) {
       console.log('Showing AirPlay picker...');
       
-      // ONLY use remote stream for AirPlay (live streamer scenario)
-      // This avoids camera feed restrictions
-      if (remoteStream) {
-        console.log('Using remote stream for AirPlay (live streamer scenario)');
+      // Use the video element directly for AirPlay
+      if (video.srcObject) {
+        console.log('Using video element for AirPlay');
         
-        // Use the remote stream directly
-        video.srcObject = remoteStream;
+        // Ensure video is playing and has proper attributes
+        video.setAttribute('webkit-airplay', 'allow');
+        video.setAttribute('playsinline', 'true');
         video.muted = false; // Enable audio for AirPlay
         
-        showAirPlayPickerInternal(video);
+        // Force video to play if not already
+        video.play().then(() => {
+          setTimeout(() => {
+            try {
+              console.log('Calling webkitShowPlaybackTargetPicker...');
+              (video as any).webkitShowPlaybackTargetPicker();
+            } catch (error) {
+              console.error('Error showing AirPlay picker:', error);
+            }
+          }, 500);
+        }).catch(console.error);
       } else {
-        console.log('No remote stream available for AirPlay - AirPlay only works with remote streams (live streamer scenario)');
-        alert('AirPlay is only available when viewing someone else\'s stream. This is a limitation of AirPlay with camera feeds.');
+        console.log('No video stream available for AirPlay');
+        alert('No video stream available for AirPlay');
       }
     }
   };
 
-  const showAirPlayPickerInternal = (video: HTMLVideoElement) => {
-    // Force video to be recognized as a video stream for AirPlay
-    video.setAttribute('webkit-airplay', 'allow');
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('preload', 'auto');
-    video.setAttribute('controls', 'false');
-    
-    // Force video to play and show AirPlay picker
-    video.play().then(() => {
-      setTimeout(() => {
-        try {
-          console.log('Calling webkitShowPlaybackTargetPicker...');
-          (video as any).webkitShowPlaybackTargetPicker();
-        } catch (error) {
-          console.error('Error showing AirPlay picker:', error);
-        }
-      }, 500);
-    }).catch(() => {
-      // Still try to show picker even if play fails
-      setTimeout(() => {
-        try {
-          console.log('Calling webkitShowPlaybackTargetPicker (fallback)...');
-          (video as any).webkitShowPlaybackTargetPicker();
-        } catch (error) {
-          console.error('Error showing AirPlay picker:', error);
-        }
-      }, 500);
-    });
-  };
 
 
   if (isConnecting) {
@@ -431,25 +345,6 @@ export default function VideoCall() {
         onLoadedData={() => console.log("Local video data loaded")}
       />
 
-      {/* Hidden AirPlay video element for proper video streaming */}
-      <video
-        ref={airplayVideoRef}
-        autoPlay
-        playsInline
-        muted={false}
-        webkit-airplay="allow"
-        controls={false}
-        preload="auto"
-        className="hidden"
-        data-testid="video-airplay"
-        onError={(e) => console.error("AirPlay video error:", e)}
-        onLoadStart={() => console.log("AirPlay video loading started")}
-        onCanPlay={() => console.log("AirPlay video can play")}
-        onPlay={() => console.log("AirPlay video playing")}
-        onPause={() => console.log("AirPlay video paused")}
-        onLoadedMetadata={() => console.log("AirPlay video metadata loaded")}
-        onLoadedData={() => console.log("AirPlay video data loaded")}
-      />
 
       {/* Waiting overlay */}
       {!hasRemotePeer && <WaitingOverlay onShareLink={shareLink} />}

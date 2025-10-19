@@ -31,9 +31,14 @@ export default function Home() {
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             VideoCall
           </h1>
-          <p className="text-base text-muted-foreground">
-            High-quality video calls with AirPlay support
-          </p>
+          <div className="space-y-2">
+            <p className="text-base text-muted-foreground">
+              High-quality video calls with AirPlay support
+            </p>
+            <p className="text-sm font-medium text-primary">
+              Version 2 - One-Way Streaming
+            </p>
+          </div>
         </div>
 
         <div className="pt-4">
