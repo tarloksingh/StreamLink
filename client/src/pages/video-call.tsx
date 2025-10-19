@@ -15,6 +15,7 @@ export default function VideoCall() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const airplayVideoRef = useRef<HTMLVideoElement>(null);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -58,38 +59,79 @@ export default function VideoCall() {
     }
   }, [remoteStream]);
 
-  // Set up AirPlay-specific video element - FOCUS ON LOCAL STREAM ONLY
+  // Create HLS stream URL from WebRTC stream for AirPlay
+  const createStreamUrl = async (stream: MediaStream) => {
+    try {
+      // Create a canvas to capture the video stream
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const video = document.createElement('video');
+      
+      // Set up the video element to display the stream
+      video.srcObject = stream;
+      video.play();
+      
+      // Set canvas dimensions
+      canvas.width = 1280;
+      canvas.height = 720;
+      
+      // Create a stream URL using canvas capture
+      const canvasStream = canvas.captureStream(30); // 30 FPS
+      
+      // Create a MediaRecorder for the canvas stream
+      const mediaRecorder = new MediaRecorder(canvasStream, {
+        mimeType: 'video/webm; codecs=vp9'
+      });
+      
+      // Create a blob URL for the stream
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        setStreamUrl(url);
+      };
+      
+      // Start recording
+      mediaRecorder.start(1000); // Record in 1-second chunks
+      
+      // Draw the video to canvas continuously
+      const drawFrame = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          requestAnimationFrame(drawFrame);
+        }
+      };
+      
+      video.addEventListener('loadedmetadata', () => {
+        drawFrame();
+      });
+      
+    } catch (error) {
+      console.error('Error creating stream URL:', error);
+    }
+  };
+
+  // Set up AirPlay-specific video element with URL source
   useEffect(() => {
-    if (airplayVideoRef.current && localStream) {
-      const airplayVideo = airplayVideoRef.current;
-      
-      // Configure for AirPlay video streaming (not screen mirroring)
-      airplayVideo.setAttribute('webkit-airplay', 'allow');
-      airplayVideo.setAttribute('playsinline', 'true');
-      airplayVideo.setAttribute('controls', 'false');
-      airplayVideo.setAttribute('autoplay', 'true');
-      airplayVideo.setAttribute('muted', 'false');
-      airplayVideo.setAttribute('preload', 'auto');
-      
-      // ONLY use local stream for AirPlay
-      if (localStream && airplayVideo.srcObject !== localStream) {
-        airplayVideo.srcObject = localStream;
-        
-        // Force the video to play for AirPlay detection
-        airplayVideo.play().then(() => {
-          console.log('AirPlay video playing with local stream');
-        }).catch(console.error);
-      }
+    if (localStream) {
+      // Create stream URL for AirPlay
+      createStreamUrl(localStream);
     }
   }, [localStream]);
 
-  // Set up AirPlay detection - SIMPLIFIED: Always show button when local stream exists
+  // Set up AirPlay detection - Show button when stream URL is available
   useEffect(() => {
-    // Always show AirPlay button when local stream is available
-    if (localStream) {
+    // Show AirPlay button when stream URL is available
+    if (streamUrl) {
       setShowAirPlayButton(true);
       
-      // Still set up detection for wireless state changes
+      // Set up detection for wireless state changes
       const video = airplayVideoRef.current;
       if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
         const handleWirelessChange = () => {
@@ -106,7 +148,7 @@ export default function VideoCall() {
     } else {
       setShowAirPlayButton(false);
     }
-  }, [localStream]);
+  }, [streamUrl]);
 
   // Show AirPlay prompt when rear camera is detected
   useEffect(() => {
@@ -263,12 +305,12 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    // Use the dedicated AirPlay video element - FOCUS ON LOCAL STREAM ONLY
+    // Use the dedicated AirPlay video element with stream URL
     const video = airplayVideoRef.current;
-    if (video && 'webkitShowPlaybackTargetPicker' in video && localStream) {
-      // Ensure the AirPlay video has the LOCAL stream
-      if (video.srcObject !== localStream) {
-        video.srcObject = localStream;
+    if (video && 'webkitShowPlaybackTargetPicker' in video && streamUrl) {
+      // Ensure the AirPlay video has the stream URL
+      if (video.src !== streamUrl) {
+        video.src = streamUrl;
       }
       
       // Force video to be recognized as a video stream for AirPlay
@@ -285,7 +327,7 @@ export default function VideoCall() {
           } catch (error) {
             console.error('Error showing AirPlay picker:', error);
           }
-        }, 300);
+        }, 500);
       }).catch(() => {
         // Still try to show picker even if play fails
         setTimeout(() => {
@@ -294,7 +336,7 @@ export default function VideoCall() {
           } catch (error) {
             console.error('Error showing AirPlay picker:', error);
           }
-        }, 300);
+        }, 500);
       });
     }
   };
@@ -380,6 +422,7 @@ export default function VideoCall() {
         preload="auto"
         crossOrigin="anonymous"
         poster=""
+        src={streamUrl || undefined}
         className="hidden"
         data-testid="video-airplay"
         onError={(e) => console.error("AirPlay video error:", e)}
