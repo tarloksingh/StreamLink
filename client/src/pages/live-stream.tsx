@@ -7,6 +7,9 @@ export default function LiveStream() {
   const [, params] = useRoute("/live/:streamId");
   const streamId = params?.streamId || "";
   
+  // Check if this user is the broadcaster or a viewer
+  const [isBroadcaster, setIsBroadcaster] = useState(false);
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -18,8 +21,37 @@ export default function LiveStream() {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // Simple media stream setup
+  // Detect if user is broadcaster or viewer
   useEffect(() => {
+    const checkUserRole = () => {
+      try {
+        // Check if this stream was created by the current user
+        const activeStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
+        const currentStream = activeStreams.find((stream: any) => stream.id === streamId);
+        
+        if (currentStream) {
+          // If stream exists in activeStreams, this user is the broadcaster
+          setIsBroadcaster(true);
+          console.log('User is broadcaster for stream:', streamId);
+        } else {
+          // If stream doesn't exist in activeStreams, this user is a viewer
+          setIsBroadcaster(false);
+          console.log('User is viewer for stream:', streamId);
+        }
+      } catch (error) {
+        console.error('Error checking user role:', error);
+        // Default to broadcaster if there's an error
+        setIsBroadcaster(true);
+      }
+    };
+
+    checkUserRole();
+  }, [streamId]);
+
+  // Setup stream only for broadcasters
+  useEffect(() => {
+    if (!isBroadcaster) return; // Only setup stream for broadcasters
+    
     const setupStream = async () => {
       try {
         console.log('Setting up live stream...');
@@ -189,21 +221,45 @@ export default function LiveStream() {
       onTouchStart={handleInteraction}
       data-testid="live-stream-container"
     >
-      {/* Main video */}
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={false}
-        webkit-airplay="allow"
-        controls={false}
-        preload="auto"
-        className="absolute inset-0 h-full w-full object-contain"
-        data-testid="video-live"
-        onError={(e) => console.error("Live video error:", e)}
-        onPlay={() => console.log("Live video playing")}
-        onPause={() => console.log("Live video paused")}
-      />
+      {/* Main video - only show for broadcasters */}
+      {isBroadcaster && (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          webkit-airplay="allow"
+          controls={false}
+          preload="auto"
+          className="absolute inset-0 h-full w-full object-contain"
+          data-testid="video-live"
+          onError={(e) => console.error("Live video error:", e)}
+          onPlay={() => console.log("Live video playing")}
+          onPause={() => console.log("Live video paused")}
+        />
+      )}
+
+      {/* Viewer message when no stream available */}
+      {!isBroadcaster && (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center text-white">
+            <div className="mb-4">
+              <svg className="h-16 w-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Stream Not Available</h2>
+            <p className="text-gray-300 mb-4">The broadcaster may have ended the stream or there's a connection issue.</p>
+            <Button
+              variant="secondary"
+              onClick={() => window.location.href = '/StreamLink/'}
+              className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+            >
+              Back to Home
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Controls overlay */}
       <div 
@@ -215,20 +271,22 @@ export default function LiveStream() {
         <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 p-4 pb-safe">
           <div className="flex items-center justify-center gap-4">
             
-            {/* Share button */}
-            <Button
-              size="icon"
-              variant="secondary"
-              className="h-14 w-14 rounded-full shadow-lg"
-              onClick={shareStream}
-              data-testid="button-share"
-            >
-              {linkCopied ? (
-                <Copy className="h-6 w-6" />
-              ) : (
-                <Share2 className="h-6 w-6" />
-              )}
-            </Button>
+            {/* Share button - only for broadcasters */}
+            {isBroadcaster && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={shareStream}
+                data-testid="button-share"
+              >
+                {linkCopied ? (
+                  <Copy className="h-6 w-6" />
+                ) : (
+                  <Share2 className="h-6 w-6" />
+                )}
+              </Button>
+            )}
 
             {/* AirPlay button */}
             {showAirPlayButton && (
@@ -246,26 +304,51 @@ export default function LiveStream() {
               </Button>
             )}
 
-            {/* End stream button */}
-            <Button
-              size="icon"
-              variant="destructive"
-              className="h-14 w-14 rounded-full shadow-lg"
-              onClick={endStream}
-              data-testid="button-end-stream"
-            >
-              <PhoneOff className="h-6 w-6" />
-            </Button>
+            {/* End stream button - only for broadcasters */}
+            {isBroadcaster && (
+              <Button
+                size="icon"
+                variant="destructive"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={endStream}
+                data-testid="button-end-stream"
+              >
+                <PhoneOff className="h-6 w-6" />
+              </Button>
+            )}
+
+            {/* Back button - only for viewers */}
+            {!isBroadcaster && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={() => window.location.href = '/StreamLink/'}
+                data-testid="button-back"
+              >
+                <X className="h-6 w-6" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Status indicator */}
-      {isBroadcasting && (
+      {isBroadcaster && isBroadcasting && (
         <div className="absolute top-4 left-4 z-30">
           <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
             <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
             LIVE
+          </div>
+        </div>
+      )}
+
+      {/* Viewer message */}
+      {!isBroadcaster && (
+        <div className="absolute top-4 left-4 z-30">
+          <div className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+            VIEWING
           </div>
         </div>
       )}
