@@ -40,12 +40,20 @@ export default function VideoCall() {
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      // Ensure video is configured for AirPlay
+      localVideoRef.current.setAttribute('webkit-airplay', 'allow');
+      localVideoRef.current.setAttribute('playsinline', 'true');
+      console.log('Local video stream set up for AirPlay');
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      // Ensure video is configured for AirPlay
+      remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
+      remoteVideoRef.current.setAttribute('playsinline', 'true');
+      console.log('Remote video stream set up for AirPlay');
     }
   }, [remoteStream]);
 
@@ -72,15 +80,30 @@ export default function VideoCall() {
         }
       };
 
+      // Additional AirPlay event handlers
+      const handleAirPlayStart = () => {
+        console.log('AirPlay started - video streaming to TV');
+      };
+
+      const handleAirPlayStop = () => {
+        console.log('AirPlay stopped - video streaming back to device');
+      };
+
       video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
       video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+      video.addEventListener('webkitbeginfullscreen', handleAirPlayStart);
+      video.addEventListener('webkitendfullscreen', handleAirPlayStop);
 
       // Trigger initial availability check
-      video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
+      setTimeout(() => {
+        video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
+      }, 100);
 
       return () => {
         video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
         video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+        video.removeEventListener('webkitbeginfullscreen', handleAirPlayStart);
+        video.removeEventListener('webkitendfullscreen', handleAirPlayStop);
       };
     }
   }, [localStream, remoteStream]);
@@ -246,12 +269,44 @@ export default function VideoCall() {
       console.log('Showing AirPlay picker for video:', video);
       console.log('Video srcObject:', video.srcObject);
       console.log('Video paused:', video.paused);
+      console.log('Video readyState:', video.readyState);
+      
+      // Ensure video is properly configured for AirPlay
+      video.setAttribute('webkit-airplay', 'allow');
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('preload', 'auto');
+      
+      // Force video to be recognized as a video source
+      if (video.srcObject) {
+        const tracks = (video.srcObject as MediaStream).getTracks();
+        const videoTracks = tracks.filter(track => track.kind === 'video');
+        console.log('Video tracks available:', videoTracks.length);
+        
+        if (videoTracks.length > 0) {
+          console.log('Video track details:', {
+            label: videoTracks[0].label,
+            enabled: videoTracks[0].enabled,
+            readyState: videoTracks[0].readyState
+          });
+        }
+      }
       
       // Ensure the video is playing before showing AirPlay picker
       if (video.paused) {
         video.play().then(() => {
           console.log('Video playing, showing AirPlay picker');
-          (video as any).webkitShowPlaybackTargetPicker();
+          // Wait for video to be ready
+          if (video.readyState >= 2) {
+            setTimeout(() => {
+              (video as any).webkitShowPlaybackTargetPicker();
+            }, 200);
+          } else {
+            video.addEventListener('canplay', () => {
+              setTimeout(() => {
+                (video as any).webkitShowPlaybackTargetPicker();
+              }, 200);
+            }, { once: true });
+          }
         }).catch((error) => {
           console.error('Failed to play video for AirPlay:', error);
           // Still try to show the picker even if play fails
@@ -260,7 +315,18 @@ export default function VideoCall() {
         });
       } else {
         console.log('Video already playing, showing AirPlay picker');
-        (video as any).webkitShowPlaybackTargetPicker();
+        // Wait for video to be ready
+        if (video.readyState >= 2) {
+          setTimeout(() => {
+            (video as any).webkitShowPlaybackTargetPicker();
+          }, 200);
+        } else {
+          video.addEventListener('canplay', () => {
+            setTimeout(() => {
+              (video as any).webkitShowPlaybackTargetPicker();
+            }, 200);
+          }, { once: true });
+        }
       }
     } else {
       console.warn('AirPlay not available or video element not found');
@@ -295,7 +361,9 @@ export default function VideoCall() {
           muted={false}
           webkit-airplay="allow"
           controls={false}
-          className="absolute inset-0 h-full w-full object-cover"
+          preload="auto"
+          crossOrigin="anonymous"
+          className="absolute inset-0 h-full w-full object-contain"
           data-testid="video-remote"
           onError={(e) => console.error("Remote video error:", e)}
           onLoadStart={() => console.log("Remote video loading started")}
@@ -303,6 +371,8 @@ export default function VideoCall() {
           onAirPlayChanged={(e) => console.log("AirPlay changed:", e)}
           onPlay={() => console.log("Remote video playing")}
           onPause={() => console.log("Remote video paused")}
+          onLoadedMetadata={() => console.log("Remote video metadata loaded")}
+          onLoadedData={() => console.log("Remote video data loaded")}
         />
       )}
 
@@ -314,10 +384,12 @@ export default function VideoCall() {
         muted
         webkit-airplay="allow"
         controls={false}
+        preload="auto"
+        crossOrigin="anonymous"
         className={
           hasRemotePeer
             ? "absolute bottom-20 right-4 h-32 w-24 rounded-lg object-cover shadow-2xl z-10"
-            : "absolute inset-0 h-full w-full object-cover"
+            : "absolute inset-0 h-full w-full object-contain"
         }
         data-testid="video-local"
         onError={(e) => console.error("Local video error:", e)}
@@ -326,6 +398,8 @@ export default function VideoCall() {
         onCanPlay={() => console.log("Local video can play")}
         onPlay={() => console.log("Local video playing")}
         onPause={() => console.log("Local video paused")}
+        onLoadedMetadata={() => console.log("Local video metadata loaded")}
+        onLoadedData={() => console.log("Local video data loaded")}
       />
 
       {/* Waiting overlay */}
