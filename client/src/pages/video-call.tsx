@@ -13,6 +13,7 @@ export default function VideoCall() {
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -92,12 +93,12 @@ export default function VideoCall() {
   useEffect(() => {
     const enterFullScreen = async () => {
       try {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-          setIsFullScreen(true);
+        const element = containerRef.current;
+        if (element && element.requestFullscreen) {
+          await element.requestFullscreen();
         }
       } catch (err) {
-        console.log("Fullscreen not supported or denied");
+        console.log("Fullscreen not supported or denied:", err);
       }
     };
 
@@ -142,6 +143,25 @@ export default function VideoCall() {
     }
   };
 
+  const toggleFullScreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        const element = containerRef.current;
+        if (element && element.requestFullscreen) {
+          await element.requestFullscreen();
+        }
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        console.log('Fullscreen request denied - requires user interaction');
+      } else {
+        console.error('Failed to toggle fullscreen:', err);
+      }
+    }
+  };
+
   if (isConnecting) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -155,6 +175,7 @@ export default function VideoCall() {
 
   return (
     <div 
+      ref={containerRef}
       className="relative h-screen w-full overflow-hidden bg-black"
       onClick={handleInteraction}
       onTouchStart={handleInteraction}
@@ -211,6 +232,8 @@ export default function VideoCall() {
         onSwitchCamera={switchCamera}
         onEndCall={endCall}
         onShareLink={shareLink}
+        onToggleFullScreen={toggleFullScreen}
+        isFullScreen={isFullScreen}
         hasRemotePeer={hasRemotePeer}
         className={showControls ? "translate-y-0" : "translate-y-full"}
       />

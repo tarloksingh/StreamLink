@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, SwitchCamera, PhoneOff, Share2, Copy, Check } from "lucide-react";
+import { Mic, MicOff, SwitchCamera, PhoneOff, Share2, Check, Maximize, Minimize } from "lucide-react";
 import { useState } from "react";
 
 interface CallControlsProps {
@@ -8,6 +8,8 @@ interface CallControlsProps {
   onSwitchCamera: () => void;
   onEndCall: () => void;
   onShareLink: () => void;
+  onToggleFullScreen: () => void;
+  isFullScreen: boolean;
   hasRemotePeer: boolean;
   className?: string;
 }
@@ -18,6 +20,8 @@ export function CallControls({
   onSwitchCamera,
   onEndCall,
   onShareLink,
+  onToggleFullScreen,
+  isFullScreen,
   hasRemotePeer,
   className = "",
 }: CallControlsProps) {
@@ -60,6 +64,21 @@ export function CallControls({
             data-testid="button-switch-camera"
           >
             <SwitchCamera className="h-6 w-6" />
+          </Button>
+
+          {/* Full screen button */}
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-14 w-14 rounded-full shadow-lg"
+            onClick={onToggleFullScreen}
+            data-testid="button-toggle-fullscreen"
+          >
+            {isFullScreen ? (
+              <Minimize className="h-6 w-6" />
+            ) : (
+              <Maximize className="h-6 w-6" />
+            )}
           </Button>
 
           {/* End call button */}
