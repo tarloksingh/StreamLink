@@ -2,11 +2,29 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { copyFileSync } from "fs";
 
 export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
+    // Custom plugin to copy 404.html for GitHub Pages
+    {
+      name: 'copy-404',
+      writeBundle() {
+        if (process.env.NODE_ENV === "production") {
+          try {
+            copyFileSync(
+              path.resolve(import.meta.dirname, "client/public/404.html"),
+              path.resolve(import.meta.dirname, "dist/public/404.html")
+            );
+            console.log('Copied 404.html for GitHub Pages');
+          } catch (error) {
+            console.warn('Could not copy 404.html:', error);
+          }
+        }
+      }
+    },
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
