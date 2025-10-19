@@ -14,6 +14,7 @@ export default function VideoCall() {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const airplayVideoRef = useRef<HTMLVideoElement>(null);
   
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -57,9 +58,31 @@ export default function VideoCall() {
     }
   }, [remoteStream]);
 
+  // Set up AirPlay-specific video element
+  useEffect(() => {
+    if (airplayVideoRef.current) {
+      const airplayVideo = airplayVideoRef.current;
+      
+      // Configure for AirPlay video streaming (not screen mirroring)
+      airplayVideo.setAttribute('webkit-airplay', 'allow');
+      airplayVideo.setAttribute('playsinline', 'true');
+      airplayVideo.setAttribute('controls', 'false');
+      airplayVideo.setAttribute('autoplay', 'true');
+      airplayVideo.setAttribute('muted', 'false');
+      airplayVideo.setAttribute('preload', 'auto');
+      
+      // Set the stream to the AirPlay video
+      const activeStream = hasRemotePeer ? remoteStream : localStream;
+      if (activeStream && airplayVideo.srcObject !== activeStream) {
+        airplayVideo.srcObject = activeStream;
+        console.log('AirPlay video configured with stream');
+      }
+    }
+  }, [remoteStream, localStream, hasRemotePeer]);
+
   // Set up AirPlay detection
   useEffect(() => {
-    const video = remoteVideoRef.current || localVideoRef.current;
+    const video = airplayVideoRef.current;
     if (!video) return;
 
     // Check if WebKit AirPlay API is available
@@ -263,73 +286,99 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    // Use the video that's currently displaying the main content
-    const video = hasRemotePeer ? remoteVideoRef.current : localVideoRef.current;
+    // Use the dedicated AirPlay video element
+    const video = airplayVideoRef.current;
     if (video && 'webkitShowPlaybackTargetPicker' in video) {
-      console.log('Showing AirPlay picker for video:', video);
+      console.log('Showing AirPlay picker for video streaming:', video);
       console.log('Video srcObject:', video.srcObject);
       console.log('Video paused:', video.paused);
       console.log('Video readyState:', video.readyState);
       
-      // Ensure video is properly configured for AirPlay
+      // Ensure the AirPlay video has the current stream
+      const activeStream = hasRemotePeer ? remoteStream : localStream;
+      if (activeStream && video.srcObject !== activeStream) {
+        video.srcObject = activeStream;
+        console.log('Updated AirPlay video with current stream');
+      }
+      
+      // Force video to be recognized as a video stream for AirPlay
       video.setAttribute('webkit-airplay', 'allow');
       video.setAttribute('playsinline', 'true');
       video.setAttribute('preload', 'auto');
+      video.setAttribute('controls', 'false');
       
-      // Force video to be recognized as a video source
-      if (video.srcObject) {
-        const tracks = (video.srcObject as MediaStream).getTracks();
-        const videoTracks = tracks.filter(track => track.kind === 'video');
-        console.log('Video tracks available:', videoTracks.length);
-        
-        if (videoTracks.length > 0) {
-          console.log('Video track details:', {
-            label: videoTracks[0].label,
-            enabled: videoTracks[0].enabled,
-            readyState: videoTracks[0].readyState
-          });
-        }
+      // Ensure video has proper dimensions for AirPlay
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.log('Video dimensions not ready, waiting...');
+        video.addEventListener('loadedmetadata', () => {
+          console.log('Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
+          triggerAirPlayPicker(video);
+        }, { once: true });
+        return;
       }
       
-      // Ensure the video is playing before showing AirPlay picker
-      if (video.paused) {
-        video.play().then(() => {
-          console.log('Video playing, showing AirPlay picker');
-          // Wait for video to be ready
-          if (video.readyState >= 2) {
-            setTimeout(() => {
-              (video as any).webkitShowPlaybackTargetPicker();
-            }, 200);
-          } else {
-            video.addEventListener('canplay', () => {
-              setTimeout(() => {
-                (video as any).webkitShowPlaybackTargetPicker();
-              }, 200);
-            }, { once: true });
-          }
-        }).catch((error) => {
-          console.error('Failed to play video for AirPlay:', error);
-          // Still try to show the picker even if play fails
-          console.log('Showing AirPlay picker despite play failure');
-          (video as any).webkitShowPlaybackTargetPicker();
-        });
-      } else {
-        console.log('Video already playing, showing AirPlay picker');
-        // Wait for video to be ready
-        if (video.readyState >= 2) {
-          setTimeout(() => {
-            (video as any).webkitShowPlaybackTargetPicker();
-          }, 200);
-        } else {
-          video.addEventListener('canplay', () => {
-            setTimeout(() => {
-              (video as any).webkitShowPlaybackTargetPicker();
-            }, 200);
-          }, { once: true });
-        }
-      }
+      triggerAirPlayPicker(video);
     } else {
       console.warn('AirPlay not available or video element not found');
+    }
+  };
+
+  const triggerAirPlayPicker = (video: HTMLVideoElement) => {
+    // Ensure the video is playing and ready
+    if (video.paused) {
+      video.play().then(() => {
+        console.log('Video playing, showing AirPlay picker');
+        showAirPlayPickerInternal(video);
+      }).catch((error) => {
+        console.error('Failed to play video for AirPlay:', error);
+        showAirPlayPickerInternal(video);
+      });
+    } else {
+      console.log('Video already playing, showing AirPlay picker');
+      showAirPlayPickerInternal(video);
+    }
+  };
+
+  const showAirPlayPickerInternal = (video: HTMLVideoElement) => {
+    // For proper AirPlay video streaming (not screen mirroring), we need to ensure
+    // the video element is recognized as a media source that can be streamed
+    console.log('AirPlay video element state:', {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      readyState: video.readyState,
+      paused: video.paused,
+      srcObject: !!video.srcObject
+    });
+    
+    // Force video to be in a state that AirPlay can recognize for video streaming
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      // Video has proper dimensions, proceed with AirPlay video streaming
+      video.currentTime = video.currentTime; // Force a seek to ensure video is active
+      
+      // Ensure video is playing and ready for AirPlay
+      if (video.paused) {
+        video.play().catch(console.error);
+      }
+      
+      // Small delay to ensure video is fully ready
+      setTimeout(() => {
+        try {
+          console.log('Calling webkitShowPlaybackTargetPicker for DIRECT VIDEO STREAMING');
+          (video as any).webkitShowPlaybackTargetPicker();
+        } catch (error) {
+          console.error('Error showing AirPlay picker:', error);
+        }
+      }, 500);
+    } else {
+      console.warn('Video dimensions not available, AirPlay may not work properly');
+      // Still try to show the picker
+      setTimeout(() => {
+        try {
+          (video as any).webkitShowPlaybackTargetPicker();
+        } catch (error) {
+          console.error('Error showing AirPlay picker:', error);
+        }
+      }, 500);
     }
   };
 
@@ -363,6 +412,7 @@ export default function VideoCall() {
           controls={false}
           preload="auto"
           crossOrigin="anonymous"
+          poster=""
           className="absolute inset-0 h-full w-full object-contain"
           data-testid="video-remote"
           onError={(e) => console.error("Remote video error:", e)}
@@ -385,6 +435,7 @@ export default function VideoCall() {
         controls={false}
         preload="auto"
         crossOrigin="anonymous"
+        poster=""
         className={
           hasRemotePeer
             ? "absolute bottom-20 right-4 h-32 w-24 rounded-lg object-cover shadow-2xl z-10"
@@ -398,6 +449,28 @@ export default function VideoCall() {
         onPause={() => console.log("Local video paused")}
         onLoadedMetadata={() => console.log("Local video metadata loaded")}
         onLoadedData={() => console.log("Local video data loaded")}
+      />
+
+      {/* Hidden AirPlay video element for proper video streaming */}
+      <video
+        ref={airplayVideoRef}
+        autoPlay
+        playsInline
+        muted={false}
+        webkit-airplay="allow"
+        controls={false}
+        preload="auto"
+        crossOrigin="anonymous"
+        poster=""
+        className="hidden"
+        data-testid="video-airplay"
+        onError={(e) => console.error("AirPlay video error:", e)}
+        onLoadStart={() => console.log("AirPlay video loading started")}
+        onCanPlay={() => console.log("AirPlay video can play")}
+        onPlay={() => console.log("AirPlay video playing")}
+        onPause={() => console.log("AirPlay video paused")}
+        onLoadedMetadata={() => console.log("AirPlay video metadata loaded")}
+        onLoadedData={() => console.log("AirPlay video data loaded")}
       />
 
       {/* Waiting overlay */}
