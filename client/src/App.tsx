@@ -12,6 +12,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/live/:streamId" component={LiveStream} />
+      <Route path="/StreamLink/" component={Home} />
+      <Route path="/StreamLink/live/:streamId" component={LiveStream} />
       <Route component={NotFound} />
     </Switch>
   );
