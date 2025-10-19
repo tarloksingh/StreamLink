@@ -15,6 +15,9 @@ export default function VideoCall() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
+  // Check if this is a viewer joining an existing call
+  const [isViewer, setIsViewer] = useState(false);
+  
   const [showAirPlayPrompt, setShowAirPlayPrompt] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -35,6 +38,18 @@ export default function VideoCall() {
     connectionQuality,
     callDuration,
   } = useWebRTC(callId);
+
+  // Detect if this is a viewer joining an existing call
+  useEffect(() => {
+    // If there's already a remote stream when we connect, we're a viewer
+    if (remoteStream && !localStream) {
+      setIsViewer(true);
+      console.log('User is a viewer - joining existing call');
+    } else if (localStream && !remoteStream) {
+      setIsViewer(false);
+      console.log('User is the broadcaster - created new call');
+    }
+  }, [localStream, remoteStream]);
 
   // Set up video streams
   useEffect(() => {
@@ -59,16 +74,19 @@ export default function VideoCall() {
 
 
 
-  // Set up AirPlay detection - Show button when local stream is available (broadcaster)
+  // Set up AirPlay detection - Show button when video stream is available
   useEffect(() => {
-    console.log('AirPlay detection - localStream:', !!localStream);
-    // Show AirPlay button when local stream is available (you're broadcasting)
-    if (localStream) {
-      console.log('Setting AirPlay button to true - local stream available for broadcasting');
+    console.log('AirPlay detection - localStream:', !!localStream, 'remoteStream:', !!remoteStream, 'isViewer:', isViewer);
+    
+    // Show AirPlay button when video stream is available
+    const hasVideoStream = (isViewer && remoteStream) || (!isViewer && localStream);
+    
+    if (hasVideoStream) {
+      console.log(`Setting AirPlay button to true - ${isViewer ? 'remote' : 'local'} stream available`);
       setShowAirPlayButton(true);
       
       // Set up detection for wireless state changes
-      const video = localVideoRef.current;
+      const video = isViewer ? remoteVideoRef.current : localVideoRef.current;
       if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
         const handleWirelessChange = () => {
           const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
@@ -82,10 +100,10 @@ export default function VideoCall() {
         };
       }
     } else {
-      console.log('Setting AirPlay button to false - no local stream available');
+      console.log('Setting AirPlay button to false - no video stream available');
       setShowAirPlayButton(false);
     }
-  }, [localStream]);
+  }, [localStream, remoteStream, isViewer]);
 
   // Show AirPlay prompt when rear camera is detected
   useEffect(() => {
@@ -242,14 +260,14 @@ export default function VideoCall() {
   };
 
   const showAirPlayPicker = () => {
-    // Use the local video element for AirPlay (your broadcast)
-    const video = localVideoRef.current;
+    // Use the appropriate video element for AirPlay
+    const video = isViewer ? remoteVideoRef.current : localVideoRef.current;
     if (video && 'webkitShowPlaybackTargetPicker' in video) {
-      console.log('Showing AirPlay picker for broadcast...');
+      console.log(`Showing AirPlay picker for ${isViewer ? 'viewer' : 'broadcaster'}...`);
       
-      // Use the local video element directly for AirPlay
+      // Use the video element directly for AirPlay
       if (video.srcObject) {
-        console.log('Using local video element for AirPlay');
+        console.log(`Using ${isViewer ? 'remote' : 'local'} video element for AirPlay`);
         
         // Ensure video is playing and has proper attributes
         video.setAttribute('webkit-airplay', 'allow');
@@ -268,7 +286,7 @@ export default function VideoCall() {
           }, 500);
         }).catch(console.error);
       } else {
-        console.log('No local video stream available for AirPlay');
+        console.log('No video stream available for AirPlay');
         alert('No video stream available for AirPlay');
       }
     }
@@ -318,27 +336,53 @@ export default function VideoCall() {
         onLoadedData={() => console.log("Remote video data loaded")}
       />
 
-      {/* Local video (full screen when waiting, small PiP when connected) */}
-      <video
-        ref={localVideoRef}
-        autoPlay
-        playsInline
-        muted
-        webkit-airplay="allow"
-        controls={false}
-        preload="auto"
-        crossOrigin="anonymous"
-        poster=""
-        className="absolute inset-0 h-full w-full object-contain"
-        data-testid="video-local"
-        onError={(e) => console.error("Local video error:", e)}
-        onLoadStart={() => console.log("Local video loading started")}
-        onCanPlay={() => console.log("Local video can play")}
-        onPlay={() => console.log("Local video playing")}
-        onPause={() => console.log("Local video paused")}
-        onLoadedMetadata={() => console.log("Local video metadata loaded")}
-        onLoadedData={() => console.log("Local video data loaded")}
-      />
+      {/* Local video - only show for broadcaster, hidden for viewers */}
+      {!isViewer && (
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          webkit-airplay="allow"
+          controls={false}
+          preload="auto"
+          crossOrigin="anonymous"
+          poster=""
+          className="absolute inset-0 h-full w-full object-contain"
+          data-testid="video-local"
+          onError={(e) => console.error("Local video error:", e)}
+          onLoadStart={() => console.log("Local video loading started")}
+          onCanPlay={() => console.log("Local video can play")}
+          onPlay={() => console.log("Local video playing")}
+          onPause={() => console.log("Local video paused")}
+          onLoadedMetadata={() => console.log("Local video metadata loaded")}
+          onLoadedData={() => console.log("Local video data loaded")}
+        />
+      )}
+
+      {/* Remote video - show for viewers to watch the stream */}
+      {isViewer && remoteStream && (
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          webkit-airplay="allow"
+          controls={false}
+          preload="auto"
+          crossOrigin="anonymous"
+          poster=""
+          className="absolute inset-0 h-full w-full object-contain"
+          data-testid="video-remote"
+          onError={(e) => console.error("Remote video error:", e)}
+          onLoadStart={() => console.log("Remote video loading started")}
+          onCanPlay={() => console.log("Remote video can play")}
+          onPlay={() => console.log("Remote video playing")}
+          onPause={() => console.log("Remote video paused")}
+          onLoadedMetadata={() => console.log("Remote video metadata loaded")}
+          onLoadedData={() => console.log("Remote video data loaded")}
+        />
+      )}
 
 
       {/* Waiting overlay - REMOVED for broadcaster model */}
