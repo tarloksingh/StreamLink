@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
@@ -14,9 +14,41 @@ interface LiveStream {
 export default function Home() {
   const [, setLocation] = useLocation();
 
-  // For now, we'll use a simple approach without backend
-  const [liveStreams] = useState<LiveStream[]>([]);
+  // Track active streams in localStorage
+  const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
   const [isLoading] = useState(false);
+
+  // Load active streams from localStorage
+  useEffect(() => {
+    const loadActiveStreams = () => {
+      try {
+        const stored = localStorage.getItem('activeStreams');
+        if (stored) {
+          const streams = JSON.parse(stored);
+          setLiveStreams(streams);
+        }
+      } catch (error) {
+        console.error('Error loading active streams:', error);
+      }
+    };
+
+    loadActiveStreams();
+    
+    // Listen for storage changes (when streams are added/removed)
+    const handleStorageChange = () => {
+      loadActiveStreams();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check periodically for updates
+    const interval = setInterval(loadActiveStreams, 2000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   const createStreamMutation = useMutation({
     mutationFn: async () => {
@@ -28,6 +60,20 @@ export default function Home() {
     },
     onSuccess: (data) => {
       console.log('Stream created successfully, navigating to:', `/live/${data.streamId}`);
+      
+      // Add stream to active streams
+      const newStream: LiveStream = {
+        id: data.streamId,
+        title: `Live Stream ${data.streamId.substring(0, 4)}`,
+        viewerCount: 1,
+        thumbnail: null
+      };
+      
+      // Update localStorage
+      const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
+      currentStreams.push(newStream);
+      localStorage.setItem('activeStreams', JSON.stringify(currentStreams));
+      
       setLocation(`/live/${data.streamId}`);
     },
     onError: (error) => {
@@ -87,12 +133,8 @@ export default function Home() {
               <p className="text-muted-foreground">Be the first to start a live stream!</p>
             </div>
           ) : (
-            // Show demo streams for now
-            [
-              { id: 'demo1', title: 'Demo Stream 1', viewerCount: 12 },
-              { id: 'demo2', title: 'Demo Stream 2', viewerCount: 8 },
-              { id: 'demo3', title: 'Demo Stream 3', viewerCount: 25 },
-            ].map((stream) => (
+            // Show real active streams
+            liveStreams.map((stream) => (
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"

@@ -112,8 +112,18 @@ export default function LiveStream() {
       tracks.forEach(track => track.stop());
     }
     setIsBroadcasting(false);
-    // Navigate back to home
-    window.location.href = '/';
+    
+    // Remove stream from active streams
+    try {
+      const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
+      const updatedStreams = currentStreams.filter((stream: any) => stream.id !== streamId);
+      localStorage.setItem('activeStreams', JSON.stringify(updatedStreams));
+    } catch (error) {
+      console.error('Error removing stream from active streams:', error);
+    }
+    
+    // Navigate back to home using wouter
+    window.location.href = '/StreamLink/';
   };
 
   // Toggle fullscreen
