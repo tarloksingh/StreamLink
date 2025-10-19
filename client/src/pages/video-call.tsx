@@ -83,39 +83,28 @@ export default function VideoCall() {
     }
   }, [localStream]);
 
-  // Set up AirPlay detection
+  // Set up AirPlay detection - SIMPLIFIED: Always show button when local stream exists
   useEffect(() => {
-    const video = airplayVideoRef.current;
-    if (!video) return;
-
-    // Check if WebKit AirPlay API is available
-    if ('WebKitPlaybackTargetAvailabilityEvent' in window) {
-      const handleAvailabilityChange = (event: any) => {
-        // Only show AirPlay button if there's LOCAL video content and AirPlay is available
-        const shouldShowButton = event.availability === 'available' && !!localStream;
-        setShowAirPlayButton(shouldShowButton);
-      };
-
-      const handleWirelessChange = () => {
-        const video = airplayVideoRef.current;
-        if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
+    // Always show AirPlay button when local stream is available
+    if (localStream) {
+      setShowAirPlayButton(true);
+      
+      // Still set up detection for wireless state changes
+      const video = airplayVideoRef.current;
+      if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
+        const handleWirelessChange = () => {
           const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
           setIsAirPlayActive(isWireless);
-        }
-      };
-
-      video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
-      video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-
-      // Trigger initial availability check
-      setTimeout(() => {
-        video.dispatchEvent(new Event('webkitplaybacktargetavailabilitychanged'));
-      }, 500);
-
-      return () => {
-        video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAvailabilityChange);
-        video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-      };
+        };
+        
+        video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+        
+        return () => {
+          video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
+        };
+      }
+    } else {
+      setShowAirPlayButton(false);
     }
   }, [localStream]);
 
@@ -288,46 +277,28 @@ export default function VideoCall() {
       video.setAttribute('preload', 'auto');
       video.setAttribute('controls', 'false');
       
-      // Ensure video has proper dimensions for AirPlay
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
-        video.addEventListener('loadedmetadata', () => {
-          triggerAirPlayPicker(video);
-        }, { once: true });
-        return;
-      }
-      
-      triggerAirPlayPicker(video);
-    }
-  };
-
-  const triggerAirPlayPicker = (video: HTMLVideoElement) => {
-    // Ensure the video is playing and ready
-    if (video.paused) {
+      // Force video to play and show AirPlay picker
       video.play().then(() => {
-        showAirPlayPickerInternal(video);
+        setTimeout(() => {
+          try {
+            (video as any).webkitShowPlaybackTargetPicker();
+          } catch (error) {
+            console.error('Error showing AirPlay picker:', error);
+          }
+        }, 300);
       }).catch(() => {
-        showAirPlayPickerInternal(video);
+        // Still try to show picker even if play fails
+        setTimeout(() => {
+          try {
+            (video as any).webkitShowPlaybackTargetPicker();
+          } catch (error) {
+            console.error('Error showing AirPlay picker:', error);
+          }
+        }, 300);
       });
-    } else {
-      showAirPlayPickerInternal(video);
     }
   };
 
-  const showAirPlayPickerInternal = (video: HTMLVideoElement) => {
-    // Ensure video is playing and ready for AirPlay
-    if (video.paused) {
-      video.play().catch(console.error);
-    }
-    
-    // Show AirPlay picker for video streaming
-    setTimeout(() => {
-      try {
-        (video as any).webkitShowPlaybackTargetPicker();
-      } catch (error) {
-        console.error('Error showing AirPlay picker:', error);
-      }
-    }, 500);
-  };
 
   if (isConnecting) {
     return (
