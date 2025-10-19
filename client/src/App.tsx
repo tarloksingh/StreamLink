@@ -4,14 +4,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
-import VideoCall from "@/pages/video-call";
+import LiveStream from "@/pages/live-stream";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/call/:callId" component={VideoCall} />
+      <Route path="/live/:streamId" component={LiveStream} />
       <Route component={NotFound} />
     </Switch>
   );

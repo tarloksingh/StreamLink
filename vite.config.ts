@@ -31,6 +31,8 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
   },
+  // GitHub Pages configuration
+  base: process.env.NODE_ENV === "production" ? "/StreamLink/" : "/",
   server: {
     fs: {
       strict: true,
