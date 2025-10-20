@@ -89,19 +89,27 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           webrtcManagerRef.current.setOnRemoteStream((stream) => {
             addDebugLog('📺 Remote stream received!');
             setHasRemoteStream(true);
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = stream;
-              remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
-              remoteVideoRef.current.setAttribute('playsinline', 'true');
-              remoteVideoRef.current.muted = false;
-              remoteVideoRef.current.play().then(() => {
-                addDebugLog('▶️ Remote video playing!');
-              }).catch(err => {
-                addDebugLog(`❌ Play error: ${err.message}`);
-              });
-              setShowAirPlayButton(true);
-              console.log('Remote stream received');
-            }
+            
+            // Use setTimeout to ensure video element is rendered
+            setTimeout(() => {
+              if (remoteVideoRef.current) {
+                addDebugLog('🎥 Setting up video element...');
+                remoteVideoRef.current.srcObject = stream;
+                remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
+                remoteVideoRef.current.setAttribute('playsinline', 'true');
+                remoteVideoRef.current.muted = false;
+                
+                remoteVideoRef.current.play().then(() => {
+                  addDebugLog('▶️ Remote video playing!');
+                }).catch(err => {
+                  addDebugLog(`❌ Play error: ${err.message}`);
+                });
+                setShowAirPlayButton(true);
+                console.log('Remote stream set to video element');
+              } else {
+                addDebugLog('❌ Video element not found!');
+              }
+            }, 100);
           });
 
           // Set up connection state handler
