@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { X, PhoneOff, Share2, Copy } from "lucide-react";
+import { WebRTCManager } from "@/lib/webrtc";
 
 export default function LiveStream() {
   const [, params] = useRoute("/live/:streamId");
@@ -11,6 +12,7 @@ export default function LiveStream() {
   const [isBroadcaster, setIsBroadcaster] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
   const [showControls, setShowControls] = useState(true);
@@ -20,86 +22,91 @@ export default function LiveStream() {
   const [isAirPlayActive, setIsAirPlayActive] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [connectionState, setConnectionState] = useState<string>('new');
+  
+  // WebRTC manager
+  const webrtcManagerRef = useRef<WebRTCManager | null>(null);
 
-  // Detect if user is broadcaster or viewer
+  // Initialize WebRTC manager
   useEffect(() => {
-    const checkUserRole = () => {
+    webrtcManagerRef.current = new WebRTCManager();
+    
+    return () => {
+      if (webrtcManagerRef.current) {
+        webrtcManagerRef.current.stopStreaming();
+      }
+    };
+  }, []);
+
+  // Detect if user is broadcaster or viewer and setup stream
+  useEffect(() => {
+    if (!webrtcManagerRef.current || !streamId) return;
+
+    const setupStream = async () => {
       try {
         // Check if this stream was created by the current user
         const activeStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
         const currentStream = activeStreams.find((stream: any) => stream.id === streamId);
         
         if (currentStream) {
-          // If stream exists in activeStreams, this user is the broadcaster
+          // User is the broadcaster
           setIsBroadcaster(true);
           console.log('User is broadcaster for stream:', streamId);
+          
+          // Start broadcasting
+          const stream = await webrtcManagerRef.current!.startBroadcasting(streamId);
+          
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.setAttribute('webkit-airplay', 'allow');
+            videoRef.current.setAttribute('playsinline', 'true');
+            videoRef.current.muted = false;
+            
+            await videoRef.current.play();
+            setIsBroadcasting(true);
+            setShowAirPlayButton(true);
+            console.log('Live stream started');
+          }
         } else {
-          // If stream doesn't exist in activeStreams, this user is a viewer
+          // User is a viewer
           setIsBroadcaster(false);
           console.log('User is viewer for stream:', streamId);
+          
+          // Start viewing (with demo stream for now)
+          await webrtcManagerRef.current.startViewing(streamId);
+          
+          // Simulate receiving a remote stream
+          setTimeout(() => {
+            webrtcManagerRef.current!.simulateRemoteStream();
+          }, 1000);
         }
-      } catch (error) {
-        console.error('Error checking user role:', error);
-        // Default to broadcaster if there's an error
-        setIsBroadcaster(true);
-      }
-    };
 
-    checkUserRole();
-    
-    // Check periodically for role changes
-    const interval = setInterval(checkUserRole, 1000);
-    
-    return () => {
-      clearInterval(interval);
-    };
-  }, [streamId]);
-
-  // Setup stream only for broadcasters
-  useEffect(() => {
-    if (!isBroadcaster) return; // Only setup stream for broadcasters
-    
-    const setupStream = async () => {
-      try {
-        console.log('Setting up live stream...');
-        
-        // Get user media
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: true,
+        // Set up remote stream handler
+        webrtcManagerRef.current.setOnRemoteStream((stream) => {
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = stream;
+            remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
+            remoteVideoRef.current.setAttribute('playsinline', 'true');
+            remoteVideoRef.current.muted = false;
+            remoteVideoRef.current.play();
+            setShowAirPlayButton(true);
+            console.log('Remote stream received');
+          }
         });
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute('webkit-airplay', 'allow');
-          videoRef.current.setAttribute('playsinline', 'true');
-          videoRef.current.muted = false;
-          
-          // Force play
-          await videoRef.current.play();
-          setIsBroadcasting(true);
-          setShowAirPlayButton(true);
-          console.log('Live stream started');
-        }
+        // Set up connection state handler
+        webrtcManagerRef.current.setOnConnectionState((state) => {
+          setConnectionState(state);
+          console.log('Connection state changed:', state);
+        });
+
       } catch (error) {
         console.error('Error setting up stream:', error);
       }
     };
 
     setupStream();
-
-    // Cleanup
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
-      }
-    };
-  }, []);
+  }, [streamId]);
 
   // Handle user interaction
   const handleInteraction = () => {
@@ -145,10 +152,9 @@ export default function LiveStream() {
   };
 
   // End live stream
-  const endStream = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
+  const endStream = async () => {
+    if (webrtcManagerRef.current) {
+      await webrtcManagerRef.current.stopStreaming();
     }
     setIsBroadcasting(false);
     
@@ -169,57 +175,33 @@ export default function LiveStream() {
   // Toggle fullscreen
   const toggleFullScreen = () => {
     if (!containerRef.current) return;
-
-    if (!isFullScreen) {
-      if (containerRef.current.requestFullscreen) {
-        containerRef.current.requestFullscreen();
-      }
+    
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen();
+      setIsFullScreen(true);
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
+      document.exitFullscreen();
+      setIsFullScreen(false);
     }
-    setIsFullScreen(!isFullScreen);
   };
 
   // AirPlay functionality
   const showAirPlayPicker = () => {
-    const video = videoRef.current;
-    if (video && 'webkitShowPlaybackTargetPicker' in video) {
-      console.log('Showing AirPlay picker...');
-      
-      video.setAttribute('webkit-airplay', 'allow');
-      video.setAttribute('playsinline', 'true');
-      video.muted = false;
-      
-      video.play().then(() => {
+    const videoElement = isBroadcaster ? videoRef.current : remoteVideoRef.current;
+    if (videoElement && 'webkitShowPlaybackTargetPicker' in videoElement) {
+      videoElement.play().then(() => {
         setTimeout(() => {
           try {
-            (video as any).webkitShowPlaybackTargetPicker();
+            (videoElement as any).webkitShowPlaybackTargetPicker();
           } catch (error) {
             console.error('Error showing AirPlay picker:', error);
           }
         }, 500);
       }).catch(console.error);
+    } else {
+      alert('AirPlay not available or no stream to play.');
     }
   };
-
-  // AirPlay detection
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video && 'webkitCurrentPlaybackTargetIsWireless' in video) {
-      const handleWirelessChange = () => {
-        const isWireless = (video as any).webkitCurrentPlaybackTargetIsWireless;
-        setIsAirPlayActive(isWireless);
-      };
-      
-      video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-      
-      return () => {
-        video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleWirelessChange);
-      };
-    }
-  }, []);
 
   return (
     <div 
@@ -229,7 +211,7 @@ export default function LiveStream() {
       onTouchStart={handleInteraction}
       data-testid="live-stream-container"
     >
-      {/* Main video - only show for broadcasters */}
+      {/* Main video - for broadcaster */}
       {isBroadcaster && (
         <video
           ref={videoRef}
@@ -247,26 +229,22 @@ export default function LiveStream() {
         />
       )}
 
-      {/* Viewer message when no stream available */}
+      {/* Remote video - for viewer */}
       {!isBroadcaster && (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center text-white">
-            <div className="mb-4">
-              <svg className="h-16 w-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-semibold mb-2">Stream Not Available</h2>
-            <p className="text-gray-300 mb-4">The broadcaster may have ended the stream or there's a connection issue.</p>
-            <Button
-              variant="secondary"
-              onClick={() => window.location.href = '/StreamLink/'}
-              className="bg-white/20 hover:bg-white/30 text-white border-white/30"
-            >
-              Back to Home
-            </Button>
-          </div>
-        </div>
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          webkit-airplay="allow"
+          controls={false}
+          preload="auto"
+          className="absolute inset-0 h-full w-full object-contain"
+          data-testid="video-remote"
+          onError={(e) => console.error("Remote video error:", e)}
+          onPlay={() => console.log("Remote video playing")}
+          onPause={() => console.log("Remote video paused")}
+        />
       )}
 
       {/* Controls overlay */}
@@ -360,6 +338,13 @@ export default function LiveStream() {
           </div>
         </div>
       )}
+
+      {/* Connection state indicator */}
+      <div className="absolute top-4 right-4 z-30">
+        <div className="bg-black/50 text-white px-2 py-1 rounded text-xs">
+          {connectionState}
+        </div>
+      </div>
     </div>
   );
 }
