@@ -5,7 +5,7 @@ import { WebRTCManager } from "@/lib/webrtc";
 
 interface LiveStreamViewerProps {
   streamId: string;
-  mode: 'broadcast' | 'view';
+  mode: 'broadcast' | 'view' | 'initiator' | 'joiner';
   onBack: () => void;
 }
 
@@ -110,11 +110,34 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
 
     const setupStream = async () => {
       try {
-        if (mode === 'broadcast') {
-          // User is the broadcaster
+        const isTwoWayCall = mode === 'initiator' || mode === 'joiner';
+        
+        if (isTwoWayCall) {
+          // TWO-WAY VIDEO CALL - Both participants get camera access
+          addDebugLog(`📞 Starting two-way call (${mode})...`);
+          
+          // Start two-way call
+          const stream = await webrtcManagerRef.current!.startTwoWayCall(
+            streamId, 
+            mode === 'initiator'
+          );
+          addDebugLog(`✅ Got local stream with ${stream.getTracks().length} tracks`);
+          
+          // Set up LOCAL video (small, in corner)
+          if (videoRef.current) {
+            addDebugLog('🎥 Setting up LOCAL video...');
+            videoRef.current.srcObject = stream;
+            videoRef.current.muted = true; // Mute local to avoid echo
+            await videoRef.current.play();
+            addDebugLog('▶️ Local video playing!');
+          }
+          
+          setIsBroadcasting(true);
+          
+        } else if (mode === 'broadcast') {
+          // ONE-WAY BROADCAST (legacy mode)
           addDebugLog('📡 Starting broadcast...');
           
-          // Start broadcasting
           const stream = await webrtcManagerRef.current!.startBroadcasting(streamId);
           addDebugLog(`✅ Got stream with ${stream.getTracks().length} tracks`);
           
@@ -133,10 +156,9 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             addDebugLog('❌ Video element not found!');
           }
         } else {
-          // User is a viewer
+          // ONE-WAY VIEWER (legacy mode)
           addDebugLog('👀 Joining as viewer...');
           
-          // Start viewing - signaling server will connect us
           if (webrtcManagerRef.current) {
             await webrtcManagerRef.current.startViewing(streamId);
             setConnectionState('connecting');
@@ -237,19 +259,25 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Share stream link
+  // Share stream/call link
   const shareStream = async () => {
     const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
-    const streamUrl = `${window.location.origin}${basePath}?stream=${streamId}&mode=view`;
+    const isTwoWayCall = mode === 'initiator' || mode === 'joiner';
+    
+    // For calls, use 'joiner' mode; for streams, use 'view' mode
+    const shareMode = isTwoWayCall ? 'joiner' : 'view';
+    const urlParam = isTwoWayCall ? 'call' : 'stream';
+    const shareUrl = `${window.location.origin}${basePath}?${urlParam}=${streamId}&mode=${shareMode}`;
+    
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'Live Stream',
-          text: 'Check out my live stream!',
-          url: streamUrl,
+          title: isTwoWayCall ? 'Join Video Call' : 'Live Stream',
+          text: isTwoWayCall ? 'Join my video call!' : 'Check out my live stream!',
+          url: shareUrl,
         });
       } else {
-        await navigator.clipboard.writeText(streamUrl);
+        await navigator.clipboard.writeText(shareUrl);
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
       }
@@ -257,7 +285,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       console.error('Error sharing:', error);
       // Fallback to copying to clipboard
       try {
-        await navigator.clipboard.writeText(streamUrl);
+        await navigator.clipboard.writeText(shareUrl);
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
       } catch (clipboardError) {
@@ -330,7 +358,59 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       onTouchStart={handleInteraction}
       data-testid="live-stream-container"
     >
-      {/* Main video - for broadcaster */}
+      {/* TWO-WAY CALL LAYOUT */}
+      {(mode === 'initiator' || mode === 'joiner') && (
+        <>
+          {/* Remote video - MAIN (full screen) */}
+          {hasRemoteStream || connectionState === 'connected' ? (
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline={false}
+              muted={false}
+              controls={true}
+              preload="auto"
+              className="absolute inset-0 w-full h-full object-contain bg-black"
+              data-testid="video-remote-call"
+              onError={(e) => console.error("Remote video error:", e)}
+              onPlay={() => console.log("Remote video playing")}
+              onPause={() => console.log("Remote video paused")}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+              <div className="text-center text-white p-8">
+                <div className="mb-4">
+                  <svg className="h-20 w-20 mx-auto text-gray-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold mb-2">Waiting for other person...</h2>
+                <p className="text-gray-400 mb-4 max-w-md">
+                  {connectionState === 'connecting' ? 'Connecting...' : 
+                   connectionState === 'failed' ? 'Connection failed.' :
+                   'Share the link to start the call'}
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Local video - SMALL (picture-in-picture) */}
+          <div className="absolute top-4 right-4 z-30 w-32 h-32 md:w-48 md:h-36 rounded-lg overflow-hidden shadow-2xl border-2 border-white/20">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted={true}
+              className="w-full h-full object-cover bg-gray-900"
+              data-testid="video-local-call"
+              onError={(e) => console.error("Local video error:", e)}
+              onPlay={() => console.log("Local video playing")}
+            />
+          </div>
+        </>
+      )}
+      
+      {/* Main video - for ONE-WAY broadcaster */}
       {mode === 'broadcast' && (
         <video
           ref={videoRef}
@@ -348,7 +428,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
         />
       )}
 
-      {/* Remote video - for viewer */}
+      {/* Remote video - for ONE-WAY viewer */}
       {mode === 'view' && (
         <>
           {hasRemoteStream || connectionState === 'connected' ? (
@@ -425,8 +505,8 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
         <div className="bg-black/80 backdrop-blur-xl border-t border-white/10 p-4 pb-safe">
           <div className="flex items-center justify-center gap-4">
             
-            {/* Share button - only for broadcasters */}
-            {mode === 'broadcast' && (
+            {/* Share button - for broadcasters and call initiators */}
+            {(mode === 'broadcast' || mode === 'initiator') && (
               <Button
                 size="icon"
                 variant="secondary"
@@ -443,7 +523,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             )}
 
             {/* Fullscreen button - for everyone */}
-            {(mode === 'view' || mode === 'broadcast') && (
+            {(mode === 'view' || mode === 'broadcast' || mode === 'initiator' || mode === 'joiner') && (
               <Button
                 size="icon"
                 variant="secondary"
@@ -478,20 +558,20 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               </Button>
             )}
 
-            {/* End stream button - only for broadcasters */}
-            {mode === 'broadcast' && (
+            {/* End call/stream button - for broadcasters and call participants */}
+            {(mode === 'broadcast' || mode === 'initiator' || mode === 'joiner') && (
               <Button
                 size="icon"
                 variant="destructive"
                 className="h-14 w-14 rounded-full shadow-lg"
                 onClick={endStream}
-                data-testid="button-end-stream"
+                data-testid="button-end-call"
               >
                 <PhoneOff className="h-6 w-6" />
               </Button>
             )}
 
-            {/* Back button - only for viewers */}
+            {/* Back button - only for one-way viewers */}
             {mode === 'view' && (
               <Button
                 size="icon"
@@ -508,16 +588,16 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       </div>
 
       {/* Status indicator */}
-      {mode === 'broadcast' && isBroadcasting && (
+      {(mode === 'broadcast' || mode === 'initiator' || mode === 'joiner') && isBroadcasting && (
         <div className="absolute top-4 left-4 z-30">
           <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
             <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-            LIVE
+            {(mode === 'initiator' || mode === 'joiner') ? 'IN CALL' : 'LIVE'}
           </div>
         </div>
       )}
 
-      {/* Viewer message */}
+      {/* Viewer message (one-way only) */}
       {mode === 'view' && (
         <div className="absolute top-4 left-4 z-30">
           <div className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">

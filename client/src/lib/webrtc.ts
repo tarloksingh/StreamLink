@@ -241,6 +241,83 @@ export class WebRTCManager {
     }
   }
 
+  /**
+   * Start a two-way video call (both participants send & receive video)
+   * @param callId - Unique identifier for the call
+   * @param isInitiator - True if this peer initiated the call
+   */
+  async startTwoWayCall(callId: string, isInitiator: boolean): Promise<MediaStream> {
+    this.streamId = callId;
+    this.isBroadcaster = isInitiator; // Initiator creates offers
+
+    try {
+      console.log(`📞 Starting two-way call: ${callId} (${isInitiator ? 'Initiator' : 'Joiner'})`);
+      
+      // Get user media (BOTH participants need camera/mic)
+      console.log('📸 Requesting camera/microphone access...');
+      
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access requires HTTPS or localhost. Current URL must use https:// or be accessed via localhost.');
+      }
+      
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: { ideal: "user" } // Front camera for video calls
+        },
+        audio: true
+      });
+      console.log('✅ Got media stream');
+
+      // Add tracks to peer connection
+      this.localStream.getTracks().forEach(track => {
+        if (this.peerConnection) {
+          this.peerConnection.addTrack(track, this.localStream!);
+          console.log('➕ Added track to peer connection:', track.kind);
+        }
+      });
+
+      // Wait for signaling connection if needed
+      if (this.signalingClient && !this.signalingClient.isConnected()) {
+        console.log('⏳ Waiting for signaling server connection...');
+        await new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (this.signalingClient && this.signalingClient.isConnected()) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(false);
+          }, 10000);
+        });
+      }
+
+      // Register with signaling server based on role
+      if (this.signalingClient && this.signalingClient.isConnected()) {
+        if (isInitiator) {
+          console.log('📡 Registering as call initiator with signaling server...');
+          this.signalingClient.registerAsBroadcaster(callId, `Video Call ${callId.substring(0, 4)}`);
+        } else {
+          console.log('📡 Registering as call joiner with signaling server...');
+          this.signalingClient.registerAsViewer(callId);
+        }
+      } else {
+        console.error('❌ Signaling client not connected, cannot register for call');
+      }
+
+      console.log('✅ Two-way call started:', callId);
+      return this.localStream;
+    } catch (error) {
+      console.error('Error starting two-way call:', error);
+      throw error;
+    }
+  }
+
   private async handleOffer(offer: RTCSessionDescriptionInit) {
     try {
       await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
