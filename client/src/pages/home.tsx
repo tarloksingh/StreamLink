@@ -15,14 +15,17 @@ interface LiveStream {
 export default function Home() {
   const [, setLocation] = useLocation();
   
-  // Check URL parameters for stream mode
-  const [urlParams] = useState(() => {
+  // Check URL parameters for stream mode - re-read on every render
+  const urlParams = (() => {
     const params = new URLSearchParams(window.location.search);
+    const streamParam = params.get('stream');
+    const modeParam = params.get('mode');
+    console.log('URL params:', { stream: streamParam, mode: modeParam });
     return {
-      stream: params.get('stream'),
-      mode: params.get('mode')
+      stream: streamParam,
+      mode: modeParam
     };
-  });
+  })();
 
   // Track active streams in localStorage
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
@@ -92,8 +95,8 @@ export default function Home() {
       // Update local state immediately
       setLiveStreams(currentStreams);
       
-      // Navigate to live stream page using URL parameters
-      setLocation(`/?stream=${data.streamId}&mode=broadcast`);
+      // Navigate to live stream page using URL parameters - force page reload
+      window.location.href = `/?stream=${data.streamId}&mode=broadcast`;
     },
     onError: (error) => {
       console.error('Error creating stream:', error);
@@ -106,7 +109,7 @@ export default function Home() {
       <LiveStreamViewer 
         streamId={urlParams.stream} 
         mode={urlParams.mode as 'broadcast' | 'view'}
-        onBack={() => setLocation('/')}
+        onBack={() => window.location.href = '/'}
       />
     );
   }
@@ -157,17 +160,16 @@ export default function Home() {
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : (
-            // Show real active streams + demo streams for testing
-            [
-              ...liveStreams,
-              // Add some demo streams for testing
+            // Show only real active streams (no demo streams)
+            (liveStreams.length > 0 ? liveStreams : [
+              // Show demo streams only if no real streams exist
               { id: 'demo1', title: 'Demo Stream 1', viewerCount: 12, thumbnail: null },
               { id: 'demo2', title: 'Demo Stream 2', viewerCount: 8, thumbnail: null },
-            ].map((stream) => (
+            ]).map((stream) => (
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"
-                onClick={() => setLocation(`/?stream=${stream.id}&mode=view`)}
+                onClick={() => window.location.href = `/?stream=${stream.id}&mode=view`}
                 data-testid={`live-stream-${stream.id}`}
               >
                 <div className="aspect-video bg-muted rounded-lg mb-4 flex items-center justify-center">
