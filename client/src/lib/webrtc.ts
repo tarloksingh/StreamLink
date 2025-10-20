@@ -210,9 +210,30 @@ export class WebRTCManager {
     try {
       console.log('👀 Starting to view stream:', streamId);
       
+      // Wait for signaling connection if needed
+      if (this.signalingClient && !this.signalingClient.isConnected()) {
+        console.log('⏳ Waiting for signaling server connection...');
+        await new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (this.signalingClient && this.signalingClient.isConnected()) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(false);
+          }, 10000);
+        });
+      }
+      
       // Register as viewer with signaling server
-      if (this.signalingClient) {
+      if (this.signalingClient && this.signalingClient.isConnected()) {
+        console.log('📡 Registering as viewer with signaling server...');
         this.signalingClient.registerAsViewer(streamId);
+      } else {
+        console.error('❌ Signaling client not connected, cannot register viewer');
       }
     } catch (error) {
       console.error('Error starting viewing:', error);
