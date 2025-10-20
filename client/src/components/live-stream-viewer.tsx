@@ -119,7 +119,8 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
 
   // Share stream link
   const shareStream = async () => {
-    const streamUrl = `${window.location.origin}${window.location.pathname}?stream=${streamId}&mode=view`;
+    const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
+    const streamUrl = `${window.location.origin}${basePath}?stream=${streamId}&mode=view`;
     try {
       if (navigator.share) {
         await navigator.share({
@@ -166,7 +167,8 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     }
     
     // Navigate back to home
-    onBack();
+    const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
+    window.location.href = basePath;
   };
 
   // AirPlay functionality

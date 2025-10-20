@@ -96,7 +96,8 @@ export default function Home() {
       setLiveStreams(currentStreams);
       
       // Navigate to live stream page using URL parameters - force page reload
-      window.location.href = `/?stream=${data.streamId}&mode=broadcast`;
+      const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
+      window.location.href = `${basePath}?stream=${data.streamId}&mode=broadcast`;
     },
     onError: (error) => {
       console.error('Error creating stream:', error);
@@ -109,7 +110,10 @@ export default function Home() {
       <LiveStreamViewer 
         streamId={urlParams.stream} 
         mode={urlParams.mode as 'broadcast' | 'view'}
-        onBack={() => window.location.href = '/'}
+        onBack={() => {
+          const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
+          window.location.href = basePath;
+        }}
       />
     );
   }
@@ -169,7 +173,10 @@ export default function Home() {
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"
-                onClick={() => window.location.href = `/?stream=${stream.id}&mode=view`}
+                onClick={() => {
+                  const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
+                  window.location.href = `${basePath}?stream=${stream.id}&mode=view`;
+                }}
                 data-testid={`live-stream-${stream.id}`}
               >
                 <div className="aspect-video bg-muted rounded-lg mb-4 flex items-center justify-center">
