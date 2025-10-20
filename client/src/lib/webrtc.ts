@@ -146,19 +146,41 @@ export class WebRTCManager {
     if (!this.isBroadcaster) {
       // Create a simple canvas stream for demo
       const canvas = document.createElement('canvas');
-      canvas.width = 640;
-      canvas.height = 480;
+      canvas.width = 1280;
+      canvas.height = 720;
       const ctx = canvas.getContext('2d')!;
       
-      // Draw a simple animation
+      // Draw a more realistic stream simulation
       let frame = 0;
       const animate = () => {
-        ctx.fillStyle = `hsl(${frame % 360}, 50%, 50%)`;
+        // Gradient background
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, `hsl(${(frame * 2) % 360}, 70%, 60%)`);
+        gradient.addColorStop(1, `hsl(${(frame * 2 + 60) % 360}, 70%, 40%)`);
+        ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
+        
+        // Add some visual elements
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('LIVE STREAM', canvas.width / 2, canvas.height / 2 - 100);
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.font = '24px Arial';
-        ctx.fillText(`Demo Stream ${this.streamId}`, 50, 100);
-        ctx.fillText(`Frame: ${frame}`, 50, 150);
+        ctx.fillText(`Stream ID: ${this.streamId}`, canvas.width / 2, canvas.height / 2 - 50);
+        ctx.fillText(`Viewing as: ${frame}`, canvas.width / 2, canvas.height / 2);
+        
+        // Add a pulsing dot to simulate live indicator
+        ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + 0.5 * Math.sin(frame * 0.1)})`;
+        ctx.beginPath();
+        ctx.arc(100, 100, 20, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('LIVE', 100, 105);
+        
         frame++;
         requestAnimationFrame(animate);
       };

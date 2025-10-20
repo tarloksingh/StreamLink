@@ -77,6 +77,7 @@ export default function LiveStream() {
           
           // Simulate receiving a remote stream
           setTimeout(() => {
+            console.log('Simulating remote stream for viewer...');
             webrtcManagerRef.current!.simulateRemoteStream();
           }, 1000);
         }
@@ -164,6 +165,9 @@ export default function LiveStream() {
       const updatedStreams = currentStreams.filter((stream: any) => stream.id !== streamId);
       localStorage.setItem('activeStreams', JSON.stringify(updatedStreams));
       console.log('Removed stream from active streams:', streamId);
+      
+      // Trigger a custom event to notify other tabs
+      window.dispatchEvent(new CustomEvent('streamEnded', { detail: { streamId } }));
     } catch (error) {
       console.error('Error removing stream from active streams:', error);
     }

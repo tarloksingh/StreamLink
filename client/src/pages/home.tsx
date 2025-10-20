@@ -38,11 +38,20 @@ export default function Home() {
 
     loadActiveStreams();
     
+    // Listen for custom stream events
+    const handleStreamEnded = (event: CustomEvent) => {
+      console.log('Stream ended event received:', event.detail);
+      loadActiveStreams();
+    };
+    
+    window.addEventListener('streamEnded', handleStreamEnded as EventListener);
+    
     // Check periodically for updates
     const interval = setInterval(loadActiveStreams, 1000);
     
     return () => {
       clearInterval(interval);
+      window.removeEventListener('streamEnded', handleStreamEnded as EventListener);
     };
   }, []);
 
@@ -73,6 +82,7 @@ export default function Home() {
       // Update local state immediately
       setLiveStreams(currentStreams);
       
+      // Navigate to live stream page
       setLocation(`/live/${data.streamId}`);
     },
     onError: (error) => {
