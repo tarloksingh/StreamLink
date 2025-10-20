@@ -36,11 +36,14 @@ export default function Home() {
     const loadActiveStreams = () => {
       try {
         const stored = localStorage.getItem('activeStreams');
+        console.log('Loading active streams from localStorage:', stored);
         if (stored) {
           const streams = JSON.parse(stored);
+          console.log('Parsed streams:', streams);
           setLiveStreams(streams);
         } else {
           // Initialize with empty array
+          console.log('No active streams found in localStorage');
           setLiveStreams([]);
         }
       } catch (error) {
@@ -164,12 +167,23 @@ export default function Home() {
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : (
-            // Show only real active streams (no demos)
+            // Show real active streams or explanation
             liveStreams.length === 0 ? (
-              <div className="col-span-full text-center py-12">
+              <div className="col-span-full text-center py-12 space-y-4">
                 <Video className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams</h3>
-                <p className="text-muted-foreground">Click "Start Live" to begin broadcasting!</p>
+                <div>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams Visible</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Streams are stored locally and only visible on the device that created them.
+                  </p>
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 max-w-md mx-auto">
+                    <p className="text-sm text-yellow-200">
+                      <strong>⚠️ Cross-Device Limitation:</strong><br />
+                      This app needs a backend server to share streams between devices. 
+                      Currently, streams only appear on the device that created them.
+                    </p>
+                  </div>
+                </div>
               </div>
             ) : (
               liveStreams.map((stream) => (
