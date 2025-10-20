@@ -12,7 +12,10 @@ interface LiveStreamViewerProps {
 export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamViewerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const airplayVideoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -24,6 +27,8 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const [connectionState, setConnectionState] = useState<string>('new');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
+  const [recordedBlobUrl, setRecordedBlobUrl] = useState<string | null>(null);
+  const [useRecordedVideo, setUseRecordedVideo] = useState(false);
   
   // WebRTC manager
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
@@ -32,6 +37,60 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const addDebugLog = (message: string) => {
     console.log(message);
     setDebugLogs(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
+
+  // Record stream for AirPlay compatibility
+  const startRecordingForAirPlay = (stream: MediaStream) => {
+    try {
+      addDebugLog('🎬 Starting MediaRecorder for AirPlay...');
+      
+      const options = {
+        mimeType: 'video/webm;codecs=vp8,opus',
+        videoBitsPerSecond: 2500000
+      };
+
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      recordedChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+          
+          // Create blob URL every 3 seconds for progressive playback
+          if (recordedChunksRef.current.length > 0) {
+            const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            
+            // Revoke old URL to prevent memory leaks
+            if (recordedBlobUrl) {
+              URL.revokeObjectURL(recordedBlobUrl);
+            }
+            
+            setRecordedBlobUrl(url);
+            
+            // Set up the airplay video element
+            if (airplayVideoRef.current && url) {
+              airplayVideoRef.current.src = url;
+              addDebugLog('📹 AirPlay video updated');
+            }
+          }
+        }
+      };
+
+      mediaRecorder.onerror = (error) => {
+        console.error('MediaRecorder error:', error);
+        addDebugLog(`❌ Recording error: ${error}`);
+      };
+
+      // Record in 3-second chunks
+      mediaRecorder.start(3000);
+      addDebugLog('✅ MediaRecorder started');
+      
+    } catch (error) {
+      console.error('Failed to start MediaRecorder:', error);
+      addDebugLog(`❌ MediaRecorder failed: ${error instanceof Error ? error.message : 'Unknown'}`);
+    }
   };
 
   // Initialize WebRTC manager
@@ -89,6 +148,9 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           webrtcManagerRef.current.setOnRemoteStream((stream) => {
             addDebugLog('📺 Remote stream received!');
             setHasRemoteStream(true);
+            
+            // Start recording for AirPlay-compatible playback
+            startRecordingForAirPlay(stream);
             
             // Use setTimeout to ensure video element is rendered
             setTimeout(() => {
@@ -290,20 +352,49 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       {mode === 'view' && (
         <>
           {hasRemoteStream || connectionState === 'connected' ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline={false}
-              muted={false}
-              controls={true}
-              preload="auto"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              className="absolute inset-0 bg-black"
-              data-testid="video-remote"
-              onError={(e) => console.error("Remote video error:", e)}
-              onPlay={() => console.log("Remote video playing")}
-              onPause={() => console.log("Remote video paused")}
-            />
+            <>
+              {/* Live WebRTC video - shown by default */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline={false}
+                muted={false}
+                controls={true}
+                preload="auto"
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'contain',
+                  display: useRecordedVideo ? 'none' : 'block'
+                }}
+                className="absolute inset-0 bg-black"
+                data-testid="video-remote"
+                onError={(e) => console.error("Remote video error:", e)}
+                onPlay={() => console.log("Remote video playing")}
+                onPause={() => console.log("Remote video paused")}
+              />
+              
+              {/* Recorded video for AirPlay - hidden by default */}
+              <video
+                ref={airplayVideoRef}
+                autoPlay
+                playsInline={false}
+                muted={false}
+                controls={true}
+                preload="auto"
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'contain',
+                  display: useRecordedVideo ? 'block' : 'none'
+                }}
+                className="absolute inset-0 bg-black"
+                data-testid="video-airplay"
+                onError={(e) => console.error("AirPlay video error:", e)}
+                onPlay={() => console.log("AirPlay video playing")}
+                onPause={() => console.log("AirPlay video paused")}
+              />
+            </>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
               <div className="text-center text-white p-8">
@@ -368,11 +459,23 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               </Button>
             )}
 
-            {/* AirPlay note - use native controls */}
-            {mode === 'view' && (
-              <div className="text-xs text-white/60 text-center">
-                Use video controls for AirPlay
-              </div>
+            {/* Toggle to AirPlay-compatible video */}
+            {mode === 'view' && recordedBlobUrl && (
+              <Button
+                size="icon"
+                variant={useRecordedVideo ? "default" : "secondary"}
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={() => {
+                  setUseRecordedVideo(!useRecordedVideo);
+                  addDebugLog(useRecordedVideo ? '📺 Switched to live' : '📹 Switched to recorded');
+                }}
+                data-testid="button-toggle-airplay"
+                title={useRecordedVideo ? "Switch to live stream" : "Switch to AirPlay-compatible video"}
+              >
+                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/>
+                </svg>
+              </Button>
             )}
 
             {/* End stream button - only for broadcasters */}
