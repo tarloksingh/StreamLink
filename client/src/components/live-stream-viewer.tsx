@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { X, PhoneOff, Share2, Copy } from "lucide-react";
+import { X, PhoneOff, Share2, Copy, Maximize, Minimize } from "lucide-react";
 import { WebRTCManager } from "@/lib/webrtc";
 
 interface LiveStreamViewerProps {
@@ -143,6 +143,38 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     setControlsTimeout(timeout);
   };
 
+  // Fullscreen functionality
+  const toggleFullscreen = async () => {
+    if (!containerRef.current) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        // Enter fullscreen
+        await containerRef.current.requestFullscreen();
+        setIsFullScreen(true);
+        addDebugLog('📺 Entered fullscreen');
+      } else {
+        // Exit fullscreen
+        await document.exitFullscreen();
+        setIsFullScreen(false);
+        addDebugLog('📺 Exited fullscreen');
+      }
+    } catch (error) {
+      console.error('Fullscreen error:', error);
+      addDebugLog(`❌ Fullscreen error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   // Share stream link
   const shareStream = async () => {
     const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
@@ -263,9 +295,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               autoPlay
               playsInline={false}
               muted={false}
-              webkit-airplay="allow"
-              x-webkit-airplay="allow"
-              airplay="allow"
               controls={false}
               preload="auto"
               className="absolute inset-0 h-full w-full object-contain bg-black"
@@ -317,6 +346,23 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
                   <Copy className="h-6 w-6" />
                 ) : (
                   <Share2 className="h-6 w-6" />
+                )}
+              </Button>
+            )}
+
+            {/* Fullscreen button - for everyone */}
+            {(mode === 'view' || mode === 'broadcast') && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={toggleFullscreen}
+                data-testid="button-fullscreen"
+              >
+                {isFullScreen ? (
+                  <Minimize className="h-6 w-6" />
+                ) : (
+                  <Maximize className="h-6 w-6" />
                 )}
               </Button>
             )}
