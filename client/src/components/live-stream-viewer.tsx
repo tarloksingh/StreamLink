@@ -189,19 +189,43 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   // AirPlay functionality
   const showAirPlayPicker = () => {
     const videoElement = mode === 'broadcast' ? videoRef.current : remoteVideoRef.current;
-    if (videoElement && 'webkitShowPlaybackTargetPicker' in videoElement) {
-      videoElement.play().then(() => {
-        setTimeout(() => {
-          try {
-            (videoElement as any).webkitShowPlaybackTargetPicker();
-          } catch (error) {
-            console.error('Error showing AirPlay picker:', error);
-          }
-        }, 500);
-      }).catch(console.error);
-    } else {
-      alert('AirPlay not available or no stream to play.');
+    
+    if (!videoElement) {
+      addDebugLog('❌ No video element found');
+      return;
     }
+    
+    if (!videoElement.srcObject) {
+      addDebugLog('❌ No video stream attached');
+      return;
+    }
+    
+    if (!('webkitShowPlaybackTargetPicker' in videoElement)) {
+      addDebugLog('❌ AirPlay not supported on this browser');
+      return;
+    }
+    
+    addDebugLog('📺 Opening AirPlay picker...');
+    
+    // Make sure video is playing first
+    videoElement.play().then(() => {
+      // Add AirPlay-required attributes
+      videoElement.setAttribute('x-webkit-airplay', 'allow');
+      videoElement.setAttribute('webkit-playsinline', 'false');
+      
+      setTimeout(() => {
+        try {
+          (videoElement as any).webkitShowPlaybackTargetPicker();
+          addDebugLog('✅ AirPlay picker opened');
+        } catch (error) {
+          console.error('Error showing AirPlay picker:', error);
+          addDebugLog(`❌ AirPlay error: ${error instanceof Error ? error.message : 'Unknown'}`);
+        }
+      }, 500);
+    }).catch(err => {
+      console.error('Error playing video:', err);
+      addDebugLog(`❌ Play error: ${err.message}`);
+    });
   };
 
   return (
@@ -237,12 +261,14 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             <video
               ref={remoteVideoRef}
               autoPlay
-              playsInline
+              playsInline={false}
               muted={false}
               webkit-airplay="allow"
+              x-webkit-airplay="allow"
+              airplay="allow"
               controls={false}
               preload="auto"
-              className="absolute inset-0 h-full w-full object-contain"
+              className="absolute inset-0 h-full w-full object-contain bg-black"
               data-testid="video-remote"
               onError={(e) => console.error("Remote video error:", e)}
               onPlay={() => console.log("Remote video playing")}
