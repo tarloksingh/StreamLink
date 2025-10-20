@@ -245,13 +245,14 @@ export class WebRTCManager {
    * Start a two-way video call (both participants send & receive video)
    * @param callId - Unique identifier for the call
    * @param isInitiator - True if this peer initiated the call
+   * @param facingMode - Camera direction: 'user' (front) or 'environment' (rear)
    */
-  async startTwoWayCall(callId: string, isInitiator: boolean): Promise<MediaStream> {
+  async startTwoWayCall(callId: string, isInitiator: boolean, facingMode: 'user' | 'environment' = 'environment'): Promise<MediaStream> {
     this.streamId = callId;
     this.isBroadcaster = isInitiator; // Initiator creates offers
 
     try {
-      console.log(`📞 Starting two-way call: ${callId} (${isInitiator ? 'Initiator' : 'Joiner'})`);
+      console.log(`📞 Starting two-way call: ${callId} (${isInitiator ? 'Initiator' : 'Joiner'}) - Camera: ${facingMode}`);
       
       // Get user media (BOTH participants need camera/mic)
       console.log('📸 Requesting camera/microphone access...');
@@ -265,7 +266,7 @@ export class WebRTCManager {
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: { ideal: "user" } // Front camera for video calls
+          facingMode: { ideal: facingMode } // User-selected camera
         },
         audio: true
       });

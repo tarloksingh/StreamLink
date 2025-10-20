@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { X, PhoneOff, Share2, Copy, Maximize, Minimize } from "lucide-react";
+import { X, PhoneOff, Share2, Copy, Maximize, Minimize, Mic, MicOff, RefreshCw } from "lucide-react";
 import { WebRTCManager } from "@/lib/webrtc";
 
 interface LiveStreamViewerProps {
@@ -27,6 +27,8 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const [connectionState, setConnectionState] = useState<string>('new');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [hasRemoteStream, setHasRemoteStream] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment'); // Start with rear camera
   const [recordedBlobUrl, setRecordedBlobUrl] = useState<string | null>(null);
   const [useRecordedVideo, setUseRecordedVideo] = useState(false);
   
@@ -116,10 +118,11 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           // TWO-WAY VIDEO CALL - Both participants get camera access
           addDebugLog(`📞 Starting two-way call (${mode})...`);
           
-          // Start two-way call
+          // Start two-way call with selected camera
           const stream = await webrtcManagerRef.current!.startTwoWayCall(
             streamId, 
-            mode === 'initiator'
+            mode === 'initiator',
+            facingMode
           );
           addDebugLog(`✅ Got local stream with ${stream.getTracks().length} tracks`);
           
@@ -227,18 +230,39 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     setControlsTimeout(timeout);
   };
 
-  // Fullscreen functionality
+  // Fullscreen functionality (works on iOS via video element)
   const toggleFullscreen = async () => {
-    if (!containerRef.current) return;
-
     try {
+      // On mobile, use video element's fullscreen API
+      const videoElement = (mode === 'initiator' || mode === 'joiner') 
+        ? remoteVideoRef.current 
+        : (mode === 'view' ? remoteVideoRef.current : videoRef.current);
+      
+      if (!videoElement) {
+        addDebugLog('❌ No video element for fullscreen');
+        return;
+      }
+
+      // iOS Safari uses webkitEnterFullscreen
+      if ('webkitEnterFullscreen' in videoElement) {
+        if ((videoElement as any).webkitDisplayingFullscreen) {
+          (videoElement as any).webkitExitFullscreen();
+          addDebugLog('📺 Exited fullscreen (iOS)');
+        } else {
+          (videoElement as any).webkitEnterFullscreen();
+          addDebugLog('📺 Entered fullscreen (iOS)');
+        }
+        return;
+      }
+
+      // Desktop browsers use container fullscreen
+      if (!containerRef.current) return;
+      
       if (!document.fullscreenElement) {
-        // Enter fullscreen
         await containerRef.current.requestFullscreen();
         setIsFullScreen(true);
         addDebugLog('📺 Entered fullscreen');
       } else {
-        // Exit fullscreen
         await document.exitFullscreen();
         setIsFullScreen(false);
         addDebugLog('📺 Exited fullscreen');
@@ -258,6 +282,80 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Toggle mute/unmute microphone
+  const toggleMute = () => {
+    if (webrtcManagerRef.current) {
+      const localStream = webrtcManagerRef.current.getLocalStream();
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+          track.enabled = !track.enabled;
+        });
+        setIsMuted(!isMuted);
+        addDebugLog(`🎤 Microphone ${!isMuted ? 'muted' : 'unmuted'}`);
+      }
+    }
+  };
+
+  // Flip camera (front/rear)
+  const flipCamera = async () => {
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+    addDebugLog(`🔄 Flipping camera to ${newFacingMode === 'user' ? 'front' : 'rear'}...`);
+
+    // Restart the call with new camera
+    if (webrtcManagerRef.current) {
+      try {
+        // Stop current stream
+        const localStream = webrtcManagerRef.current.getLocalStream();
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+
+        // Get new stream with different camera
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: { ideal: newFacingMode }
+          },
+          audio: true
+        });
+
+        // Update local video
+        if (videoRef.current) {
+          videoRef.current.srcObject = newStream;
+        }
+
+        // Replace tracks in peer connection
+        const peerConnection = (webrtcManagerRef.current as any).peerConnection;
+        if (peerConnection) {
+          const senders = peerConnection.getSenders();
+          const videoTrack = newStream.getVideoTracks()[0];
+          const videoSender = senders.find((s: any) => s.track?.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(videoTrack);
+          }
+
+          const audioTrack = newStream.getAudioTracks()[0];
+          const audioSender = senders.find((s: any) => s.track?.kind === 'audio');
+          if (audioSender) {
+            audioSender.replaceTrack(audioTrack);
+          }
+        }
+
+        // Update the manager's local stream reference
+        (webrtcManagerRef.current as any).localStream = newStream;
+
+        addDebugLog(`✅ Camera flipped to ${newFacingMode === 'user' ? 'front' : 'rear'}`);
+      } catch (error) {
+        console.error('Error flipping camera:', error);
+        addDebugLog(`❌ Camera flip error: ${error instanceof Error ? error.message : 'Unknown'}`);
+        // Revert facing mode on error
+        setFacingMode(facingMode);
+      }
+    }
+  };
 
   // Share stream/call link
   const shareStream = async () => {
@@ -519,6 +617,36 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
                 ) : (
                   <Share2 className="h-6 w-6" />
                 )}
+              </Button>
+            )}
+
+            {/* Mute button - for call participants */}
+            {(mode === 'initiator' || mode === 'joiner') && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={toggleMute}
+                data-testid="button-mute"
+              >
+                {isMuted ? (
+                  <MicOff className="h-6 w-6" />
+                ) : (
+                  <Mic className="h-6 w-6" />
+                )}
+              </Button>
+            )}
+
+            {/* Flip camera button - for call participants */}
+            {(mode === 'initiator' || mode === 'joiner') && (
+              <Button
+                size="icon"
+                variant="secondary"
+                className="h-14 w-14 rounded-full shadow-lg"
+                onClick={flipCamera}
+                data-testid="button-flip-camera"
+              >
+                <RefreshCw className="h-6 w-6" />
               </Button>
             )}
 
