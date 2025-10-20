@@ -295,9 +295,10 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               autoPlay
               playsInline={false}
               muted={false}
-              controls={false}
+              controls={true}
               preload="auto"
-              className="absolute inset-0 h-full w-full object-contain bg-black"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              className="absolute inset-0 bg-black"
               data-testid="video-remote"
               onError={(e) => console.error("Remote video error:", e)}
               onPlay={() => console.log("Remote video playing")}
@@ -367,20 +368,11 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               </Button>
             )}
 
-            {/* AirPlay button */}
-            {showAirPlayButton && (
-              <Button
-                size="icon"
-                variant={isAirPlayActive ? "default" : "secondary"}
-                className="h-14 w-14 rounded-full shadow-lg"
-                onClick={showAirPlayPicker}
-                data-testid="button-airplay"
-              >
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z"/>
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                </svg>
-              </Button>
+            {/* AirPlay note - use native controls */}
+            {mode === 'view' && (
+              <div className="text-xs text-white/60 text-center">
+                Use video controls for AirPlay
+              </div>
             )}
 
             {/* End stream button - only for broadcasters */}
