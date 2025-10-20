@@ -23,6 +23,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const [linkCopied, setLinkCopied] = useState(false);
   const [connectionState, setConnectionState] = useState<string>('new');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
   
   // WebRTC manager
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
@@ -86,12 +87,18 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
         // Set up remote stream handler
         if (webrtcManagerRef.current) {
           webrtcManagerRef.current.setOnRemoteStream((stream) => {
+            addDebugLog('📺 Remote stream received!');
+            setHasRemoteStream(true);
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = stream;
               remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
               remoteVideoRef.current.setAttribute('playsinline', 'true');
               remoteVideoRef.current.muted = false;
-              remoteVideoRef.current.play();
+              remoteVideoRef.current.play().then(() => {
+                addDebugLog('▶️ Remote video playing!');
+              }).catch(err => {
+                addDebugLog(`❌ Play error: ${err.message}`);
+              });
               setShowAirPlayButton(true);
               console.log('Remote stream received');
             }
@@ -218,7 +225,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       {/* Remote video - for viewer */}
       {mode === 'view' && (
         <>
-          {connectionState === 'connected' ? (
+          {hasRemoteStream || connectionState === 'connected' ? (
             <video
               ref={remoteVideoRef}
               autoPlay
