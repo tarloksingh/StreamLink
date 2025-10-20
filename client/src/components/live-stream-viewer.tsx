@@ -65,14 +65,9 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           // User is a viewer
           console.log('User is viewer for stream:', streamId);
           
-          // Start viewing (with demo stream for now)
-          await webrtcManagerRef.current.startViewing(streamId);
-          
-          // Simulate receiving a remote stream
-          setTimeout(() => {
-            console.log('Simulating remote stream for viewer...');
-            webrtcManagerRef.current!.simulateRemoteStream();
-          }, 1000);
+          // NOTE: Without a signaling server, we can't connect to the broadcaster
+          // For now, we'll show a message that the stream is not available
+          setConnectionState('disconnected');
         }
 
         // Set up remote stream handler
@@ -217,20 +212,22 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
 
       {/* Remote video - for viewer */}
       {mode === 'view' && (
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          muted={false}
-          webkit-airplay="allow"
-          controls={false}
-          preload="auto"
-          className="absolute inset-0 h-full w-full object-contain"
-          data-testid="video-remote"
-          onError={(e) => console.error("Remote video error:", e)}
-          onPlay={() => console.log("Remote video playing")}
-          onPause={() => console.log("Remote video paused")}
-        />
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+          <div className="text-center text-white p-8">
+            <div className="mb-4">
+              <svg className="h-20 w-20 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Stream Not Available</h2>
+            <p className="text-gray-400 mb-4 max-w-md">
+              This live streaming app needs a real-time signaling server to connect viewers to broadcasters.
+            </p>
+            <p className="text-sm text-gray-500">
+              The broadcaster is streaming from their device, but the video can't be relayed to viewers without a backend server.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Controls overlay */}

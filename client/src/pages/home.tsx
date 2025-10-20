@@ -164,12 +164,15 @@ export default function Home() {
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : (
-            // Show only real active streams (no demo streams)
-            (liveStreams.length > 0 ? liveStreams : [
-              // Show demo streams only if no real streams exist
-              { id: 'demo1', title: 'Demo Stream 1', viewerCount: 12, thumbnail: null },
-              { id: 'demo2', title: 'Demo Stream 2', viewerCount: 8, thumbnail: null },
-            ]).map((stream) => (
+            // Show only real active streams (no demos)
+            liveStreams.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <Video className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams</h3>
+                <p className="text-muted-foreground">Click "Start Live" to begin broadcasting!</p>
+              </div>
+            ) : (
+              liveStreams.map((stream) => (
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"
@@ -188,7 +191,8 @@ export default function Home() {
                   {stream.viewerCount} watching
                 </div>
               </div>
-            ))
+              ))
+            )
           )}
         </div>
       </div>
