@@ -22,9 +22,16 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [connectionState, setConnectionState] = useState<string>('new');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   
   // WebRTC manager
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
+
+  // Add debug log helper
+  const addDebugLog = (message: string) => {
+    console.log(message);
+    setDebugLogs(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${message}`]);
+  };
 
   // Initialize WebRTC manager
   useEffect(() => {
@@ -45,67 +52,61 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       try {
         if (mode === 'broadcast') {
           // User is the broadcaster
-          console.log('User is broadcaster for stream:', streamId);
+          addDebugLog('📡 Starting broadcast...');
           
           // Start broadcasting
           const stream = await webrtcManagerRef.current!.startBroadcasting(streamId);
+          addDebugLog(`✅ Got stream with ${stream.getTracks().length} tracks`);
           
           if (videoRef.current) {
+            addDebugLog('🎥 Setting video source...');
             videoRef.current.srcObject = stream;
             videoRef.current.setAttribute('webkit-airplay', 'allow');
             videoRef.current.setAttribute('playsinline', 'true');
             videoRef.current.muted = false;
             
             await videoRef.current.play();
+            addDebugLog('▶️ Video playing!');
             setIsBroadcasting(true);
             setShowAirPlayButton(true);
-            
-            // Mark stream as active for same-device testing
-            localStorage.setItem(`stream_${streamId}_active`, 'true');
-            console.log('Live stream started');
+          } else {
+            addDebugLog('❌ Video element not found!');
           }
         } else {
           // User is a viewer
-          console.log('User is viewer for stream:', streamId);
+          addDebugLog('👀 Joining as viewer...');
           
-          // Check if this is the same browser/device (for testing)
-          const isSameDevice = localStorage.getItem(`stream_${streamId}_active`) === 'true';
-          
-          if (isSameDevice) {
-            // Same device - show a simulated stream
-            console.log('Same device detected - showing simulated stream');
-            setTimeout(() => {
-              webrtcManagerRef.current!.simulateRemoteStream();
-            }, 1000);
-            setConnectionState('connected');
-          } else {
-            // Different device - can't connect without signaling server
-            console.log('Different device - cannot connect without backend');
-            setConnectionState('disconnected');
+          // Start viewing - signaling server will connect us
+          if (webrtcManagerRef.current) {
+            await webrtcManagerRef.current.startViewing(streamId);
+            setConnectionState('connecting');
           }
         }
 
         // Set up remote stream handler
-        webrtcManagerRef.current.setOnRemoteStream((stream) => {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = stream;
-            remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
-            remoteVideoRef.current.setAttribute('playsinline', 'true');
-            remoteVideoRef.current.muted = false;
-            remoteVideoRef.current.play();
-            setShowAirPlayButton(true);
-            console.log('Remote stream received');
-          }
-        });
+        if (webrtcManagerRef.current) {
+          webrtcManagerRef.current.setOnRemoteStream((stream) => {
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = stream;
+              remoteVideoRef.current.setAttribute('webkit-airplay', 'allow');
+              remoteVideoRef.current.setAttribute('playsinline', 'true');
+              remoteVideoRef.current.muted = false;
+              remoteVideoRef.current.play();
+              setShowAirPlayButton(true);
+              console.log('Remote stream received');
+            }
+          });
 
-        // Set up connection state handler
-        webrtcManagerRef.current.setOnConnectionState((state) => {
-          setConnectionState(state);
-          console.log('Connection state changed:', state);
-        });
+          // Set up connection state handler
+          webrtcManagerRef.current.setOnConnectionState((state) => {
+            setConnectionState(state);
+            console.log('Connection state changed:', state);
+          });
+        }
 
       } catch (error) {
         console.error('Error setting up stream:', error);
+        addDebugLog(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     };
 
@@ -163,22 +164,7 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
     }
     setIsBroadcasting(false);
     
-    // Remove stream from active streams
-    try {
-      const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
-      const updatedStreams = currentStreams.filter((stream: any) => stream.id !== streamId);
-      localStorage.setItem('activeStreams', JSON.stringify(updatedStreams));
-      
-      // Remove stream active marker
-      localStorage.removeItem(`stream_${streamId}_active`);
-      
-      console.log('Removed stream from active streams:', streamId);
-      
-      // Trigger a custom event to notify other tabs
-      window.dispatchEvent(new CustomEvent('streamEnded', { detail: { streamId } }));
-    } catch (error) {
-      console.error('Error removing stream from active streams:', error);
-    }
+    console.log('Stream ended:', streamId);
     
     // Navigate back to home
     const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
@@ -251,16 +237,15 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
               <div className="text-center text-white p-8">
                 <div className="mb-4">
-                  <svg className="h-20 w-20 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-20 w-20 mx-auto text-gray-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold mb-2">Stream Not Available</h2>
+                <h2 className="text-2xl font-bold mb-2">Connecting to Stream...</h2>
                 <p className="text-gray-400 mb-4 max-w-md">
-                  Cannot connect to this stream from a different device.
-                </p>
-                <p className="text-sm text-gray-500">
-                  This app needs a signaling server to relay streams between devices. Currently only works for testing on the same browser.
+                  {connectionState === 'connecting' ? 'Establishing connection with broadcaster...' : 
+                   connectionState === 'failed' ? 'Connection failed. Please check if the stream is still live.' :
+                   'Waiting for stream...'}
                 </p>
               </div>
             </div>
@@ -365,6 +350,18 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
         <div className="bg-black/50 text-white px-2 py-1 rounded text-xs">
           {connectionState}
         </div>
+      </div>
+
+      {/* Debug logs overlay */}
+      <div className="absolute bottom-20 left-4 right-4 z-50 bg-black/80 text-white p-3 rounded-lg text-xs font-mono max-h-32 overflow-y-auto">
+        <div className="font-bold mb-1">🐛 Debug Log:</div>
+        {debugLogs.length === 0 ? (
+          <div className="text-gray-400">Waiting for events...</div>
+        ) : (
+          debugLogs.map((log, i) => (
+            <div key={i} className="mb-1">{log}</div>
+          ))
+        )}
       </div>
     </div>
   );

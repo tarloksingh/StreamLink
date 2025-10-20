@@ -1,4 +1,7 @@
 // Simple WebRTC implementation for live streaming
+import { SignalingClient } from './signaling';
+import { SIGNALING_URL } from './config';
+
 export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -7,26 +10,98 @@ export class WebRTCManager {
   private streamId: string = '';
   private onRemoteStream?: (stream: MediaStream) => void;
   private onConnectionState?: (state: string) => void;
+  private signalingClient: SignalingClient | null = null;
+  private viewerId: string = '';
 
   constructor() {
     this.setupPeerConnection();
+    this.connectToSignalingServer();
+  }
+
+  private connectToSignalingServer() {
+    console.log('🔌 Connecting to signaling server...');
+    this.signalingClient = new SignalingClient(SIGNALING_URL);
+
+    this.signalingClient.onOpen = () => {
+      console.log('✅ Connected to signaling server');
+      if (this.onConnectionState) {
+        this.onConnectionState('connected');
+      }
+    };
+
+    this.signalingClient.onOffer = async (offer) => {
+      console.log('📨 Received offer from broadcaster');
+      await this.handleOffer(offer);
+    };
+
+    this.signalingClient.onAnswer = async (answer) => {
+      console.log('📨 Received answer from viewer');
+      await this.handleAnswer(answer);
+    };
+
+    this.signalingClient.onIceCandidate = async (candidate) => {
+      console.log('📨 Received ICE candidate');
+      await this.peerConnection?.addIceCandidate(new RTCIceCandidate(candidate));
+    };
+
+    this.signalingClient.onViewerJoined = (viewerId) => {
+      console.log('👀 Viewer joined:', viewerId);
+      this.viewerId = viewerId;
+      if (this.isBroadcaster) {
+        this.createOfferForViewer(viewerId);
+      }
+    };
+
+    this.signalingClient.onStreamEnded = (streamId) => {
+      console.log('🛑 Stream ended:', streamId);
+      if (!this.isBroadcaster && streamId === this.streamId) {
+        this.stopStreaming();
+      }
+    };
   }
 
   private setupPeerConnection() {
     const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        // Free TURN servers for relaying when direct connection fails
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
+      ],
+      iceTransportPolicy: 'all' as RTCIceTransportPolicy // Try all connection types
     };
 
     this.peerConnection = new RTCPeerConnection(configuration);
 
     this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate) {
-        // In a real app, you'd send this to the other peer via signaling server
-        console.log('ICE candidate:', event.candidate);
+      if (event.candidate && this.signalingClient) {
+        console.log('📤 Sending ICE candidate:', event.candidate.type, event.candidate.protocol);
+        this.signalingClient.sendIceCandidate(
+          this.streamId,
+          event.candidate.toJSON(),
+          this.isBroadcaster ? 'viewer' : 'broadcaster'
+        );
+      } else if (!event.candidate) {
+        console.log('✅ ICE candidate gathering complete');
       }
+    };
+    
+    this.peerConnection.oniceconnectionstatechange = () => {
+      console.log('🔌 ICE connection state:', this.peerConnection?.iceConnectionState);
+    };
+    
+    this.peerConnection.onicegatheringstatechange = () => {
+      console.log('🔍 ICE gathering state:', this.peerConnection?.iceGatheringState);
     };
 
     this.peerConnection.ontrack = (event) => {
@@ -52,7 +127,16 @@ export class WebRTCManager {
     this.isBroadcaster = true;
 
     try {
+      console.log('🎥 Starting broadcast for stream:', streamId);
+      
       // Get user media
+      console.log('📸 Requesting camera/microphone access...');
+      
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access requires HTTPS or localhost. Current URL must use https:// or be accessed via localhost.');
+      }
+      
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -61,25 +145,61 @@ export class WebRTCManager {
         },
         audio: true
       });
+      console.log('✅ Got media stream');
 
       // Add tracks to peer connection
       this.localStream.getTracks().forEach(track => {
         if (this.peerConnection) {
           this.peerConnection.addTrack(track, this.localStream!);
+          console.log('➕ Added track to peer connection:', track.kind);
         }
       });
 
-      // Create offer
-      const offer = await this.peerConnection!.createOffer();
-      await this.peerConnection!.setLocalDescription(offer);
+      // Wait for signaling connection if needed
+      if (this.signalingClient && !this.signalingClient.isConnected()) {
+        console.log('⏳ Waiting for signaling server connection...');
+        await new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (this.signalingClient && this.signalingClient.isConnected()) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(false);
+          }, 5000);
+        });
+      }
 
-      // In a real app, you'd send this offer to viewers via signaling server
-      console.log('Created offer for stream:', streamId);
+      // Register as broadcaster with signaling server
+      if (this.signalingClient && this.signalingClient.isConnected()) {
+        console.log('📡 Registering as broadcaster with signaling server...');
+        this.signalingClient.registerAsBroadcaster(streamId, `Live Stream ${streamId.substring(0, 4)}`);
+      } else {
+        console.error('❌ Signaling client not connected, cannot register broadcaster');
+      }
 
+      console.log('✅ Broadcasting stream:', streamId);
       return this.localStream;
     } catch (error) {
       console.error('Error starting broadcast:', error);
       throw error;
+    }
+  }
+
+  private async createOfferForViewer(viewerId: string) {
+    try {
+      const offer = await this.peerConnection!.createOffer();
+      await this.peerConnection!.setLocalDescription(offer);
+      
+      if (this.signalingClient) {
+        this.signalingClient.sendOffer(this.streamId, offer, viewerId);
+      }
+      console.log('📤 Sent offer to viewer:', viewerId);
+    } catch (error) {
+      console.error('Error creating offer:', error);
     }
   }
 
@@ -88,21 +208,39 @@ export class WebRTCManager {
     this.isBroadcaster = false;
 
     try {
-      // In a real app, you'd receive the offer from the broadcaster via signaling server
-      // For now, we'll simulate this
-      console.log('Starting to view stream:', streamId);
+      console.log('👀 Starting to view stream:', streamId);
       
-      // This would normally come from the signaling server
-      // const offer = await this.receiveOfferFromSignalingServer(streamId);
-      // await this.peerConnection!.setRemoteDescription(offer);
-      
-      // const answer = await this.peerConnection!.createAnswer();
-      // await this.peerConnection!.setLocalDescription(answer);
-      
-      // await this.sendAnswerToSignalingServer(streamId, answer);
+      // Register as viewer with signaling server
+      if (this.signalingClient) {
+        this.signalingClient.registerAsViewer(streamId);
+      }
     } catch (error) {
       console.error('Error starting viewing:', error);
       throw error;
+    }
+  }
+
+  private async handleOffer(offer: RTCSessionDescriptionInit) {
+    try {
+      await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await this.peerConnection!.createAnswer();
+      await this.peerConnection!.setLocalDescription(answer);
+      
+      if (this.signalingClient) {
+        this.signalingClient.sendAnswer(this.streamId, answer);
+      }
+      console.log('📤 Sent answer to broadcaster');
+    } catch (error) {
+      console.error('Error handling offer:', error);
+    }
+  }
+
+  private async handleAnswer(answer: RTCSessionDescriptionInit) {
+    try {
+      await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('✅ Set remote description from answer');
+    } catch (error) {
+      console.error('Error handling answer:', error);
     }
   }
 
@@ -137,12 +275,19 @@ export class WebRTCManager {
       this.setupPeerConnection();
     }
 
+    if (this.signalingClient) {
+      this.signalingClient.close();
+    }
+
     this.isBroadcaster = false;
     this.streamId = '';
   }
 
-  // Simulate receiving a stream (for demo purposes)
+  // No longer needed - real stream comes from WebRTC
   simulateRemoteStream(): void {
+    // Deprecated - now using real WebRTC connections
+    console.warn('simulateRemoteStream is deprecated - using real WebRTC now');
+    /*
     if (!this.isBroadcaster) {
       // Create a simple canvas stream for demo
       const canvas = document.createElement('canvas');
@@ -191,5 +336,6 @@ export class WebRTCManager {
         this.onRemoteStream(stream);
       }
     }
+    */
   }
 }

@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Video, Plus, Eye } from "lucide-react";
 import LiveStreamViewer from "../components/live-stream-viewer";
+import { SignalingClient } from "@/lib/signaling";
+import { SIGNALING_URL } from "@/lib/config";
 
 interface LiveStream {
   id: string;
@@ -27,47 +29,47 @@ export default function Home() {
     };
   })();
 
-  // Track active streams in localStorage
+  // Track active streams from signaling server
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const signalingClientRef = useRef<SignalingClient | null>(null);
 
-  // Load active streams from localStorage
+  // Connect to signaling server and get stream list
   useEffect(() => {
-    const loadActiveStreams = () => {
-      try {
-        const stored = localStorage.getItem('activeStreams');
-        console.log('Loading active streams from localStorage:', stored);
-        if (stored) {
-          const streams = JSON.parse(stored);
-          console.log('Parsed streams:', streams);
-          setLiveStreams(streams);
-        } else {
-          // Initialize with empty array
-          console.log('No active streams found in localStorage');
-          setLiveStreams([]);
-        }
-      } catch (error) {
-        console.error('Error loading active streams:', error);
-        setLiveStreams([]);
-      }
+    console.log('🔌 Connecting to signaling server for stream list...');
+    const client = new SignalingClient(SIGNALING_URL);
+    signalingClientRef.current = client;
+
+    client.onOpen = () => {
+      console.log('✅ Home page: Connected to signaling server');
+      setIsConnected(true);
+      setIsLoading(false);
+      // Request stream list
+      console.log('📋 Home page: Requesting stream list...');
+      client.getStreamList();
     };
 
-    loadActiveStreams();
-    
-    // Listen for custom stream events
-    const handleStreamEnded = (event: CustomEvent) => {
-      console.log('Stream ended event received:', event.detail);
-      loadActiveStreams();
+    client.onClose = () => {
+      console.log('🔌 Disconnected from signaling server');
+      setIsConnected(false);
     };
-    
-    window.addEventListener('streamEnded', handleStreamEnded as EventListener);
-    
-    // Check periodically for updates
-    const interval = setInterval(loadActiveStreams, 1000);
-    
+
+    client.onStreamList = (streams) => {
+      console.log('📺 Received stream list:', streams);
+      setLiveStreams(streams);
+    };
+
+    // Periodically request stream list updates
+    const interval = setInterval(() => {
+      if (client.isConnected()) {
+        client.getStreamList();
+      }
+    }, 2000);
+
     return () => {
       clearInterval(interval);
-      window.removeEventListener('streamEnded', handleStreamEnded as EventListener);
+      client.close();
     };
   }, []);
 
@@ -82,23 +84,8 @@ export default function Home() {
     onSuccess: (data) => {
       console.log('Stream created successfully, navigating to:', `/live/${data.streamId}`);
       
-      // Add stream to active streams
-      const newStream: LiveStream = {
-        id: data.streamId,
-        title: `Live Stream ${data.streamId.substring(0, 4)}`,
-        viewerCount: 1,
-        thumbnail: null
-      };
-      
-      // Update localStorage
-      const currentStreams = JSON.parse(localStorage.getItem('activeStreams') || '[]');
-      currentStreams.push(newStream);
-      localStorage.setItem('activeStreams', JSON.stringify(currentStreams));
-      
-      // Update local state immediately
-      setLiveStreams(currentStreams);
-      
       // Navigate to live stream page using URL parameters - force page reload
+      // The signaling server will handle registering the stream
       const basePath = window.location.pathname.includes('/StreamLink/') ? '/StreamLink/' : '/';
       window.location.href = `${basePath}?stream=${data.streamId}&mode=broadcast`;
     },
@@ -172,17 +159,21 @@ export default function Home() {
               <div className="col-span-full text-center py-12 space-y-4">
                 <Video className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
                 <div>
-                  <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams Visible</h3>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">No Live Streams</h3>
                   <p className="text-muted-foreground mb-4">
-                    Streams are stored locally and only visible on the device that created them.
+                    {isConnected ? 
+                      'Be the first to go live! Tap "Start Live" to begin streaming.' :
+                      'Connecting to server...'
+                    }
                   </p>
-                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 max-w-md mx-auto">
-                    <p className="text-sm text-yellow-200">
-                      <strong>⚠️ Cross-Device Limitation:</strong><br />
-                      This app needs a backend server to share streams between devices. 
-                      Currently, streams only appear on the device that created them.
-                    </p>
-                  </div>
+                  {isConnected && (
+                    <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 max-w-md mx-auto">
+                      <p className="text-sm text-green-200">
+                        <strong>✅ Connected to Signaling Server</strong><br />
+                        Your streams will be visible across all devices on this network.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

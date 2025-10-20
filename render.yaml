@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: streamlink-signaling
+    env: node
+    buildCommand: npm install
+    startCommand: node signaling-server.js
+    envVars:
+      - key: PORT
+        value: 3001
+
