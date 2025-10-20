@@ -355,11 +355,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       onClick={handleInteraction}
       onTouchStart={handleInteraction}
       data-testid="live-stream-container"
-      style={{
-        // Force landscape orientation when fullscreen/AirPlay
-        width: '100%',
-        height: '100%',
-      }}
     >
       {/* TWO-WAY CALL LAYOUT */}
       {(mode === 'initiator' || mode === 'joiner') && (
