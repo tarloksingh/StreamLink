@@ -17,8 +17,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [showAirPlayButton, setShowAirPlayButton] = useState(false);
-  const [isAirPlayActive, setIsAirPlayActive] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [connectionState, setConnectionState] = useState<string>('new');
@@ -95,7 +93,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             await videoRef.current.play();
             addDebugLog('▶️ Video playing!');
             setIsBroadcasting(true);
-            setShowAirPlayButton(true);
           } else {
             addDebugLog('❌ Video element not found!');
           }
@@ -136,7 +133,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
                     });
                   }
                 });
-                setShowAirPlayButton(true);
                 console.log('Remote stream set to video element');
               } else {
                 addDebugLog('❌ Remote video element not found!');
@@ -359,6 +355,11 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
       onClick={handleInteraction}
       onTouchStart={handleInteraction}
       data-testid="live-stream-container"
+      style={{
+        // Force landscape orientation when fullscreen/AirPlay
+        width: '100%',
+        height: '100%',
+      }}
     >
       {/* TWO-WAY CALL LAYOUT */}
       {(mode === 'initiator' || mode === 'joiner') && (
@@ -372,7 +373,13 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               muted={false}
               controls={true}
               preload="auto"
-              className="absolute inset-0 w-full h-full object-contain bg-black"
+              className="absolute inset-0 w-full h-full object-cover bg-black"
+              style={{
+                transform: 'none', // Prevent auto-rotation
+                objectFit: 'cover', // Fill screen
+                width: '100%',
+                height: '100%',
+              }}
               data-testid="video-remote-call"
               onError={(e) => console.error("Remote video error:", e)}
               onPlay={() => console.log("Remote video playing")}
@@ -422,7 +429,13 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           webkit-airplay="allow"
           controls={false}
           preload="auto"
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{
+            transform: 'none',
+            objectFit: 'cover',
+            width: '100%',
+            height: '100%',
+          }}
           data-testid="video-live"
           onError={(e) => console.error("Live video error:", e)}
           onPlay={() => console.log("Live video playing")}
@@ -441,7 +454,13 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               muted={false}
               controls={true}
               preload="auto"
-              className="absolute inset-0 w-full h-full object-contain bg-black"
+              className="absolute inset-0 w-full h-full object-cover bg-black"
+              style={{
+                transform: 'none',
+                objectFit: 'cover',
+                width: '100%',
+                height: '100%',
+              }}
               data-testid="video-remote"
               onError={(e) => console.error("Remote video error:", e)}
               onPlay={() => console.log("Remote video playing")}
