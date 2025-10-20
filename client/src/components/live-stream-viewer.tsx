@@ -364,14 +364,13 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             <video
               ref={remoteVideoRef}
               autoPlay
-              playsInline={false}
+              playsInline
               muted={false}
               controls={true}
               preload="auto"
               className="absolute inset-0 w-full h-full object-cover bg-black"
               style={{
-                transform: 'none', // Prevent auto-rotation
-                objectFit: 'cover', // Fill screen
+                objectFit: 'cover',
                 width: '100%',
                 height: '100%',
               }}
@@ -406,6 +405,9 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
               playsInline
               muted={true}
               className="w-full h-full object-cover bg-gray-900"
+              style={{
+                objectFit: 'cover',
+              }}
               data-testid="video-local-call"
               onError={(e) => console.error("Local video error:", e)}
               onPlay={() => console.log("Local video playing")}
@@ -426,7 +428,6 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
           preload="auto"
           className="absolute inset-0 h-full w-full object-cover"
           style={{
-            transform: 'none',
             objectFit: 'cover',
             width: '100%',
             height: '100%',
@@ -445,13 +446,12 @@ export default function LiveStreamViewer({ streamId, mode, onBack }: LiveStreamV
             <video
               ref={remoteVideoRef}
               autoPlay
-              playsInline={false}
+              playsInline
               muted={false}
               controls={true}
               preload="auto"
               className="absolute inset-0 w-full h-full object-cover bg-black"
               style={{
-                transform: 'none',
                 objectFit: 'cover',
                 width: '100%',
                 height: '100%',
