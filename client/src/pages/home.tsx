@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Video, Plus, Eye } from "lucide-react";
+import LiveStreamViewer from "../components/live-stream-viewer";
 
 interface LiveStream {
   id: string;
@@ -13,6 +14,15 @@ interface LiveStream {
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  
+  // Check URL parameters for stream mode
+  const [urlParams] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      stream: params.get('stream'),
+      mode: params.get('mode')
+    };
+  });
 
   // Track active streams in localStorage
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
@@ -82,13 +92,24 @@ export default function Home() {
       // Update local state immediately
       setLiveStreams(currentStreams);
       
-      // Navigate to live stream page
-      setLocation(`/live/${data.streamId}`);
+      // Navigate to live stream page using URL parameters
+      setLocation(`/?stream=${data.streamId}&mode=broadcast`);
     },
     onError: (error) => {
       console.error('Error creating stream:', error);
     },
   });
+
+  // If we're in stream mode, show the live stream viewer
+  if (urlParams.stream && urlParams.mode) {
+    return (
+      <LiveStreamViewer 
+        streamId={urlParams.stream} 
+        mode={urlParams.mode as 'broadcast' | 'view'}
+        onBack={() => setLocation('/')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -146,7 +167,7 @@ export default function Home() {
               <div
                 key={stream.id}
                 className="bg-card rounded-xl p-6 shadow-lg border border-card-border cursor-pointer hover:shadow-xl transition-shadow"
-                onClick={() => setLocation(`/live/${stream.id}`)}
+                onClick={() => setLocation(`/?stream=${stream.id}&mode=view`)}
                 data-testid={`live-stream-${stream.id}`}
               >
                 <div className="aspect-video bg-muted rounded-lg mb-4 flex items-center justify-center">
