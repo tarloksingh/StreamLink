@@ -8,19 +8,27 @@ export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    // Custom plugin to copy 404.html for GitHub Pages
+    // Custom plugin to copy 404.html and .nojekyll for GitHub Pages
     {
-      name: 'copy-404',
+      name: 'copy-github-pages-files',
       writeBundle() {
         if (process.env.NODE_ENV === "production") {
           try {
+            // Copy 404.html
             copyFileSync(
               path.resolve(import.meta.dirname, "client/public/404.html"),
               path.resolve(import.meta.dirname, "dist/public/404.html")
             );
             console.log('Copied 404.html for GitHub Pages');
+            
+            // Create .nojekyll
+            copyFileSync(
+              path.resolve(import.meta.dirname, ".nojekyll"),
+              path.resolve(import.meta.dirname, "dist/public/.nojekyll")
+            );
+            console.log('Copied .nojekyll for GitHub Pages');
           } catch (error) {
-            console.warn('Could not copy 404.html:', error);
+            console.warn('Could not copy GitHub Pages files:', error);
           }
         }
       }
